@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 import acc.db.models  # noqa: F401  (registers all tables on the metadata)
 from acc.db.base import Base
+from acc.db.migrations import include_name
 
 config = context.config
 target_metadata = Base.metadata
@@ -28,6 +29,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
+        include_name=include_name,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -38,6 +40,7 @@ def _run(connection: Connection) -> None:
         connection=connection,
         target_metadata=target_metadata,
         compare_type=True,
+        include_name=include_name,
         transaction_per_migration=True,
     )
     with context.begin_transaction():

@@ -7,7 +7,7 @@ from sqlalchemy import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from acc.db.base import Base
-from acc.db.migrations import alembic_head
+from acc.db.migrations import alembic_head, include_name
 from tests.conftest import BACKEND_DIR, DbUrls
 
 pytestmark = pytest.mark.integration
@@ -24,7 +24,9 @@ async def test_models_match_migrations(migrated: Config, test_urls: DbUrls) -> N
     import acc.db.models  # noqa: F401
 
     def diff(connection: Connection) -> list[object]:
-        context = MigrationContext.configure(connection, opts={"compare_type": True})
+        context = MigrationContext.configure(
+            connection, opts={"compare_type": True, "include_name": include_name}
+        )
         return list(compare_metadata(context, Base.metadata))
 
     engine = create_async_engine(test_urls.owner_db)
@@ -32,6 +34,23 @@ async def test_models_match_migrations(migrated: Config, test_urls: DbUrls) -> N
         differences = await conn.run_sync(diff)
     await engine.dispose()
     assert differences == [], f"Models and migrations disagree: {differences}"
+
+
+@pytest.mark.parametrize(
+    ("name", "type_", "parent", "included"),
+    [
+        ("events", "table", {}, True),
+        ("events_y2026m09", "table", {}, False),
+        ("events_default", "table", {}, False),
+        ("events_y2026m09_seq_idx", "index", {"table_name": "events_y2026m09"}, False),
+        ("ix_events_seq", "index", {"table_name": "events"}, True),
+        ("events_archive", "table", {}, True),  # only the exact partition pattern is hidden
+    ],
+)
+def test_autogenerate_never_sees_partitions(
+    name: str, type_: str, parent: dict[str, str | None], included: bool
+) -> None:
+    assert include_name(name, type_, parent) is included
 
 
 def test_single_head() -> None:

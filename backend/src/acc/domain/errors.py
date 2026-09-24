@@ -18,6 +18,18 @@ class Conflict(DomainError):
     code = "conflict"
 
 
+class InvalidTransition(Conflict):
+    """A status change the state machine does not allow. Details list the legal targets."""
+
+    code = "invalid_transition"
+
+
+class StaleVersion(Conflict):
+    """Optimistic lock failure: the resource changed since the client read it."""
+
+    code = "stale_version"
+
+
 class ValidationFailed(DomainError):
     code = "validation_failed"
 

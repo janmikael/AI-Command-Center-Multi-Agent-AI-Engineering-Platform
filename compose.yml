@@ -57,11 +57,12 @@ services:
     restart: unless-stopped
     logging: *logging
 
-  # One-shot: applies migrations as the schema owner, then exits. The API waits for it.
+  # One-shot: applies migrations (as the schema owner, acc_owner), then the idempotent seed
+  # (as the runtime role, acc_app, through the command layer), then exits.
   migrate:
     build: ./backend
     image: acc-api:local
-    command: ["alembic", "upgrade", "head"]
+    command: ["sh", "-c", "alembic upgrade head && acc seed"]
     environment: *api-env
     depends_on:
       postgres:

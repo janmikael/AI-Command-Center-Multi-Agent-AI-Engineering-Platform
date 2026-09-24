@@ -19,10 +19,11 @@ from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from pydantic import SecretStr
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from acc.api.app import create_app
 from acc.config import Settings
+from acc.db.session import SessionFactory, create_engine, create_session_factory
 from acc.kv import create_redis
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -81,17 +82,55 @@ def settings(test_urls: DbUrls, migrated: Config) -> Settings:
     )
 
 
+ALL_TABLES = "events, tasks, agent_capabilities, agents, repositories, projects, sessions, users"
+
+
 @pytest.fixture
 async def clean_state(settings: Settings) -> None:
-    """Empty mutable tables and the Redis test db before each test (as the schema owner)."""
+    """Empty all tables and the Redis test db before each test.
+
+    Runs as the schema owner: TRUNCATE is deliberately not granted to the runtime role
+    (and is the only way to clear the append-only events table, which is test-only).
+    """
     assert settings.migrations_database_url is not None
     engine = create_async_engine(settings.migrations_database_url.get_secret_value())
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE users, sessions RESTART IDENTITY CASCADE"))
+        await conn.execute(text(f"TRUNCATE {ALL_TABLES} RESTART IDENTITY CASCADE"))
     await engine.dispose()
     redis = create_redis(settings.redis_url.get_secret_value())
     await redis.flushdb()
     await redis.aclose()
+
+
+@pytest.fixture
+async def sf(settings: Settings, clean_state: None) -> AsyncIterator[SessionFactory]:
+    """Session factory on the runtime role (acc_app), without starting the API."""
+    engine = create_engine(settings.database_url.get_secret_value())
+    yield create_session_factory(engine)
+    await engine.dispose()
+
+
+@pytest.fixture
+async def owner_conn(settings: Settings) -> AsyncIterator[AsyncConnection]:
+    """Autocommit connection as the schema owner (acc_owner), for DB-level assertions."""
+    assert settings.migrations_database_url is not None
+    engine = create_async_engine(
+        settings.migrations_database_url.get_secret_value(), isolation_level="AUTOCOMMIT"
+    )
+    async with engine.connect() as conn:
+        yield conn
+    await engine.dispose()
+
+
+@pytest.fixture
+async def app_conn(settings: Settings) -> AsyncIterator[AsyncConnection]:
+    """Autocommit connection as the runtime role (acc_app), for privilege assertions."""
+    engine = create_async_engine(
+        settings.database_url.get_secret_value(), isolation_level="AUTOCOMMIT"
+    )
+    async with engine.connect() as conn:
+        yield conn
+    await engine.dispose()
 
 
 @pytest.fixture
