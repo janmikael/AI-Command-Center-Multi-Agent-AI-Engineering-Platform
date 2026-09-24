@@ -66,8 +66,9 @@ export function SystemStatus() {
       role="status"
       aria-live="polite"
     >
-      <span className={cn("size-2 rounded-full", DOT[status])} aria-hidden />
-      <span>{LABEL[status]}</span>
+      <span className={cn("size-2 shrink-0 rounded-full", DOT[status])} aria-hidden />
+      {/* Dot only on narrow screens; the label stays available to screen readers. */}
+      <span className="sr-only sm:not-sr-only">{LABEL[status]}</span>
     </div>
   );
 }

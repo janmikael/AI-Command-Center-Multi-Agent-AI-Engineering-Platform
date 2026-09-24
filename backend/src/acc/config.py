@@ -11,7 +11,9 @@ _WEAK_MARKERS = ("change-me", "changeme", "dev-only", "insecure")
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="ACC_", extra="ignore")
+    # hide_input_in_errors: a validation error must never echo configuration values
+    # (connection strings, secrets) into logs or crash output.
+    model_config = SettingsConfigDict(env_prefix="ACC_", extra="ignore", hide_input_in_errors=True)
 
     env: Literal["development", "test", "production"] = "development"
 

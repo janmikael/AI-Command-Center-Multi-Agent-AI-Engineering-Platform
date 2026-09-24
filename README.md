@@ -81,3 +81,5 @@ compose.yml         full stack · compose.dev.yml hot reload · compose.prod.yml
 ## Ports
 
 Only Caddy publishes ports (80/443). In dev mode, Postgres (`127.0.0.1:5432`) and Redis (`127.0.0.1:6379`) are also exposed on localhost for tests and `psql`. If port 80 is taken on Windows, set `ACC_HTTP_PORT=8080` **and** `ACC_PUBLIC_ORIGIN=http://localhost:8080` in `.env`.
+
+**Known conflict: host port 8000.** On the primary dev machine, host port 8000 is already taken by another Docker project (`emega-sync-service`, a PHP app). The Command Center is not affected: the API listens on 8000 *inside* the Docker network and is never published, and all traffic goes through Caddy on port 80. So `curl http://localhost:8000` reaches that other app, not this API. If you ever need to publish the API directly for debugging, bind it to a free port such as `127.0.0.1:8001:8000`.

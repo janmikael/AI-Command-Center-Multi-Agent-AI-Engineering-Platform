@@ -43,6 +43,32 @@ def test_short_session_secret_rejected() -> None:
         make(session_secret=SecretStr("too-short"))
 
 
+@pytest.mark.parametrize(
+    ("overrides", "leaked"),
+    [
+        # Field-level error: the rejected value itself is sensitive.
+        ({"session_secret": "tiny-secret-value"}, "tiny-secret-value"),
+        # Model-level error: the whole input (including the DB password) is sensitive.
+        (
+            {
+                "database_url": "postgresql+asyncpg://u:hunter2-db-pw@db/acc",
+                "env": "production",
+                "public_origin": "http://plain.example",
+            },
+            "hunter2-db-pw",
+        ),
+    ],
+)
+def test_validation_errors_never_echo_config_values(
+    overrides: dict[str, object], leaked: str
+) -> None:
+    # The rendered message is what reaches crash output and logs. (The structured
+    # .errors() list keeps raw input by pydantic design; nothing in acc prints it.)
+    with pytest.raises(ValidationError) as excinfo:
+        make(**overrides)
+    assert leaked not in str(excinfo.value)
+
+
 def test_redaction_masks_credential_keys() -> None:
     event = {
         "event": "login",

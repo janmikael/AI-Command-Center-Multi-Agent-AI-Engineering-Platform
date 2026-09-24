@@ -30,10 +30,10 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
           <div className="md:hidden">
             <Nav orientation="horizontal" />
           </div>
-          <div className="hidden md:block">
+          <div className="ml-auto flex items-center gap-3 sm:gap-4">
             <SystemStatus />
+            <OperatorMenu operator={operator} />
           </div>
-          <OperatorMenu operator={operator} />
         </header>
         <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 md:px-8">{children}</main>
       </div>
