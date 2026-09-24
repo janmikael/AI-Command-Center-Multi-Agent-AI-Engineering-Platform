@@ -9,7 +9,16 @@ BASE="${ACC_PUBLIC_ORIGIN:-http://localhost}"
 EMAIL="${SMOKE_EMAIL:-smoke-$(date +%s)@example.com}"
 PASSWORD="${SMOKE_PASSWORD:-smoke-test-password-$RANDOM}"
 JAR="$(mktemp)"
-trap 'rm -f "$JAR"' EXIT
+
+cleanup() {
+  rm -f "$JAR"
+  # Remove the throwaway operator (admin cleanup of test data, not an application write).
+  if [[ -z "${SMOKE_EMAIL:-}" ]]; then
+    docker compose exec -T postgres psql -q -U postgres -d acc -v email="$EMAIL" \
+      <<< "DELETE FROM users WHERE email = :'email';" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
 
 pass() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31m✗\033[0m %s\n' "$1"; exit 1; }
