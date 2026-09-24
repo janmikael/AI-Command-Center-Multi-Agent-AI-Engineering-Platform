@@ -10,7 +10,7 @@ A private, single-operator control plane that runs, monitors and governs a team 
 
 ## 0. Guiding principles
 
-These seven rules drive every other decision in this document.
+These eight rules drive every other decision in this document.
 
 1. **The platform owns the state; agents are stateless workers.** Tasks, status, history and approvals live in Postgres and change only through the orchestrator. An agent never decides that a task is "completed". It submits a result, and the state machine decides.
 2. **Hub and spoke, never agent to agent.** Agents never talk to each other directly. Every handoff goes through the orchestrator as a task artifact. This makes every interaction auditable, replayable and interruptible.
@@ -19,6 +19,7 @@ These seven rules drive every other decision in this document.
 5. **Agents are plugins.** Agents are data rows plus an adapter class. Tasks are routed by *capability* (`plan`, `implement`, `review_code`, `design_ui`), not by agent name. Adding an agent should need zero schema changes.
 6. **Everything is an event.** One append-only event stream feeds the dashboard, the audit log, usage accounting and replay.
 7. **Derive metrics, don't trust self-reports.** Progress percentage comes from the subtask and checklist structure. An LLM saying "80% done" is only a hint.
+8. **Governance is global; context is per-project.** Behavior rules — what the AI may or may not do — are authored once and apply identically to every project. Only knowledge — what the AI knows about a given codebase — varies by project. A project can never relax a global rule; there is no per-project security exception. See §10.
 
 ---
 
@@ -405,6 +406,7 @@ CREATE TABLE audit_log (
 - **`progress_pct` is derived by the orchestrator** as `completed leaf subtasks / total leaf subtasks`, blended with acceptance-criteria checkboxes and the workflow stage weight. Agents can report a `current_step` string, which is display-only.
 - **Agent status is derived:** `working` if it has a run in `running`, `waiting_approval` if a run is paused, `error` if its last run failed within N minutes, `offline` if the adapter's health check is failing, otherwise `idle`.
 - **Retention:** Detach and archive `events` partitions older than 90 days (configurable). `tool_calls.result_excerpt` is capped at 8 KB. Full outputs go to blob storage.
+- **Global governance and multi-project context** (rule authoring, per-project knowledge base, project-level status and artifacts) are deferred to Phase 1.5 — see §10.
 
 ---
 
@@ -574,6 +576,9 @@ This is the uniform "agent to platform" protocol that works with every provider:
 | `acc.complete(summary, criteria_status[])` | all | Signals "stage done". The orchestrator validates it (for example, tests passed and a diff exists). |
 | `acc.ask_human(question, options?)` | all | Pauses the run, creates a question card in the UI, resumes with the answer |
 | `acc.request_merge()` / `acc.request_deploy(env)` / `acc.request_migration(file)` | developer | Creates an **approval** executed by the platform (§5.4) |
+| `acc.request_tool_access(tool, reason, estimated_cost?, permissions?)` | all | Creates a `tool_access` approval (§10.3) when a tool isn't already allowlisted. From Phase 1.5, the gateway also raises this automatically for any unlisted tool call, without the agent needing to call it explicitly. |
+
+From Phase 1.5, every `tools/call` above is checked against policies compiled from the Global AI Rules, not just hand-seeded ones — see §10.3.
 
 ### 4.4 Provider wiring
 
@@ -712,6 +717,9 @@ Default risk policy (seed data):
 | Edit `.github/workflows/**`, `Dockerfile*`, `infra/**`, `**/migrations/**` | require_approval |
 | DB DML/DDL on dev DB | require_approval |
 | Merge / deploy / prod migration | platform-executed + approval (always) |
+| Tool or service not yet on the allowlist (new paid tool, new third-party API, unknown external tool) | require_approval — governance-derived default, see §10.3 |
+
+From Phase 1.5 this table's defaults are generated from the Global AI Rules rather than hand-maintained — see §10.3, §10.4.
 
 ### 5.5 Failure handling
 
@@ -814,6 +822,7 @@ Each phase ends with something usable and a demo checklist.
 |---|---|---|---|
 | **0. Foundations** (1 wk) | Skeleton that deploys | Monorepo, Docker Compose (web, api, postgres, redis, caddy), Alembic baseline, auth (single operator, passkey or password+TOTP), CI, structured logging, `/healthz` | `docker compose up` runs the stack, you can log in, CI is green |
 | **1. Data model and dashboard shell** (1–2 wk) | See and manage work | Full schema, Projects/Agents/Tasks CRUD, Kanban board, agent grid, event table plus WebSocket hub with resume, seed agents | Create a task and drag it across statuses. The feed updates live in two tabs. |
+| **1.5. Governance & multi-project** (1–2 wk) | Guardrails exist before any agent runs; more than one codebase can be managed | `governance_rules`, `project_context_entries`, project `status`, project-level `artifacts`; seeded default rules for the security/tools/code/infrastructure categories; a governance→policy compiler job; project switcher, project settings page, admin Global Rules page, a context-preview endpoint (see §10) | An operator creates a second project with its own context entries. Previewing any task in either project shows the same Global Rules verbatim in layer 1, and a request to an unlisted tool produces a `tool_access` approval card. |
 | **2. First real agent: developer** (2 wk) | One agent does real work, fully observed | Runner image, orchestrator job loop, worktree management, Claude Agent SDK adapter, event normalization, usage and cost capture, run console UI, cancel/kill switch, budgets | Assign "add endpoint X" and watch live logs, commands, file changes and cost. The run ends with a pushed `acc/*` branch. |
 | **3. Governance** (2 wk) | Nothing risky happens without you | MCP gateway, policy engine, seed policies, inline holds, platform merge executor with payload hash, approvals inbox and notifications | A migration or merge attempt pauses, appears in the inbox, and the approve or reject path works end to end. Direct push to main is impossible. |
 | **4. Multi-agent workflow** (2 wk) | Planner, then builder, then reviewer | OpenAI Responses adapter, `acc-control` tools, workflow engine, subtasks and dependencies, review loop with max iterations, derived progress %, `ask_human` | "Feature" workflow runs: the plan becomes subtasks, they get implemented, the review asks for changes, the fixes pass, and the merge is approved |
@@ -841,12 +850,15 @@ Each phase ends with something usable and a demo checklist.
 | R12 | **Single-host deployment** is a SPOF | Downtime | Acceptable for a private tool. Daily PG backups off-host. The stateless design allows moving to multiple hosts later. |
 | R13 | **Windows dev host** | Docker, filesystem and perf quirks | Develop inside WSL2 with Docker Desktop. Keep the repo on the WSL filesystem. Deploy target is Linux. |
 | R14 | **Scope creep**: seven subsystems | Never ships | Strict phase gates. Phase 2 alone already delivers value. |
+| R15 | **Governance rule sprawl or conflicting rules** | Confusing or contradictory enforcement | One global set, not per-project overrides, removes the conflict surface by construction (§10.1). Categorized (security/tools/code/infrastructure), versioned via events, admin-only edit. |
+| R16 | **Compiled-policy drift**: a `policies` row generated from a Global AI Rule is hand-edited directly, so enforcement silently diverges from the documented rule | Enforcement no longer matches what the Global Rules page claims | Generated policies carry `source_rule_id` and are read-only in the UI (edit the rule, not the row); a periodic drift-check job re-diffs generated policies against their source rules. |
 
 **Known limitations (by design, v1):**
 - A single operator. RBAC tables exist, but multi-user collaboration isn't a v1 goal.
 - Agents can't message each other freely. That is deliberate (auditability). Collaboration happens through artifacts and review loops.
 - Live steering of a running agent depends on the adapter. The Agent SDK supports it, and the other adapters inject steering at the next turn.
 - Deployment executor targets are initially limited to one mechanism (for example, `docker compose` on a target host over SSH). Add others per project.
+- Multi-project workspaces and Global AI Governance rules (§10) are deferred to Phase 1.5. Phase 1 manages a single implicit project.
 
 ---
 
@@ -857,3 +869,221 @@ Each phase ends with something usable and a demo checklist.
 3. What monthly budget ceiling should the defaults use for API spend?
 4. Where do you want approval notifications: browser only, or also email or a phone push (Telegram/ntfy)?
 5. Where will the command center run: your Windows machine (WSL2) or a small Linux VPS reachable over Tailscale?
+6. For the Global Rules page (§10.5): should Global AI Rules be editable through the UI as soon as Phase 1.5 ships, or ship first as seeded, read-only rules with editing added in a later phase?
+
+---
+
+## 10. Multi-project workspace & Global AI Governance
+
+Status: **design only.** Nothing in this section changes Phase 0 or Phase 1, which ship first, unmodified, against the single implicit project already in PLAN-PHASE-0-1.md. This is the design for **Phase 1.5**, a new phase inserted between Phase 1 and Phase 2 in §7.
+
+### 10.0 Why this comes before Phase 2, not after
+
+Guiding Principle 4 requires enforcement at the tool boundary, before any agent tool call — not layered on after the fact. Phase 2 gives the developer agent a real runtime with real tool access. If Phase 1.5's governance layer doesn't exist yet, Phase 2 would briefly run a real agent against hand-seeded policy defaults only, with no compiled, auditable rule set behind them. Phase 1.5 closes that gap first. It also lets the dashboard manage more than one codebase — real usage rarely stays single-project for long.
+
+### 10.1 The core split: governance is global, context is per-project
+
+This is Guiding Principle 8. A duplicated rule is a rule that can silently drift out of sync between projects, so behavior rules are authored exactly once and knowledge is scoped per project:
+
+```
+                    Global AI Rules                    ← WHAT the AI may do
+                    (security, tools, code, infra)         same everywhere, one set
+                            │
+              ┌─────────────┼─────────────┐
+              │                           │
+         Project: eMega            Project: Affiliate
+         WooCommerce               Sites                ← WHAT the AI knows
+              │                           │                 differs per project
+         ├─ Repository(s)            ├─ Repository(s)
+         ├─ Context entries          ├─ Context entries
+         │   • Laravel sync svc      │   • WordPress sites
+         │   • WooCommerce = source  │   • Amazon affiliate
+         │     of truth              │     workflows
+         │   • AutoDS integration    │
+         ├─ Status, tasks            ├─ Status, tasks
+         └─ Artifacts, history       └─ Artifacts, history
+```
+
+A project **never** overrides a global rule. There is no per-project security exception — only per-project *knowledge*. This closes off an entire class of misconfiguration (a rule quietly relaxed "just for this one project") and keeps the whole rule set auditable in one place.
+
+### 10.2 Rule hierarchy: how an agent's context is assembled
+
+Every agent run renders its context in this fixed order, as four distinct, labeled blocks — never merged into one undifferentiated prompt, so each layer stays attributable:
+
+1. **Global AI Rules** — permanent, operator-governed, identical for every agent, every project, every run. (source: new `governance_rules` table, §10.4)
+2. **Agent Role Rules** — what a developer/architect/designer does. (source: existing `agents.system_prompt_ref`, unchanged)
+3. **Project Context** — repository info and project-specific knowledge. (source: existing `repositories` plus new `project_context_entries`, §10.4)
+4. **Task Instructions** — this task's title, description, acceptance criteria, operator comments, prior-stage artifacts. (source: existing `acc.get_task_context()`, §4.3, unchanged)
+
+```
+render_agent_context(agent, project, task) =
+    [1] global_rules()                    # identical for every call
+  + [2] agent.system_prompt_ref            # per agent role
+  + [3] project.context_entries + repos    # per project
+  + [4] task.get_task_context()            # per task, most volatile
+```
+
+Two consequences of this exact order, both deliberate:
+
+- **Precedence.** If a task instruction or a project note ever appears to conflict with a global rule, the global rule wins, unconditionally. The layers are additive for *knowledge*, never for *permission* — a project's context can tell the agent what WooCommerce is; it can never tell the agent an approval isn't required.
+- **Prompt caching.** Static content first, volatile content last, is exactly what prompt caching wants: layers 1–2 are identical across many runs, layer 3 changes only per project, and only layer 4 changes every run. This directly serves Risk R2 (runaway cost) at no extra engineering cost.
+
+The rendered context (or its hash) is stored per run — either as an `artifacts` row (`kind = 'prompt_context'`) or a new `agent_runs.prompt_hash` column — so a run's actual instructions are always reconstructable. This closes a gap in Risk R10 (non-determinism): today the architecture records the *template version*, not the fully assembled text a specific run actually saw.
+
+### 10.3 Tool enforcement: rules compile to policy, not just prompt text
+
+Guiding Principle 4 already says enforcement belongs at the tool boundary. Global AI Rules make that concrete: every governance rule that constrains a *tool call* compiles into one or more rows of the existing `policies` table (§2.2, §4.1) — the same table `mcp-gateway` already evaluates on every `tools/call`. A rule never lives only in a prompt.
+
+```
+Global AI Rules (authored, human-readable, versioned)
+        │
+        │  compiled on save (governance sync job)
+        ▼
+   ┌──────────────────────┬───────────────────────────┐
+   │                       │                           │
+policies rows         workflow exit_checks        rendered into
+(mcp-gateway           (process gates, e.g.        context layer 1
+ enforces at the        "tests_pass" before          (defense in depth:
+ tool boundary, §4.1)   a stage can complete)         the agent is also
+                                                       TOLD the rule)
+```
+
+Worked example, matching the requirement exactly — an agent requests to connect an external API:
+
+1. The agent calls a tool the gateway has no explicit `allow` policy for.
+2. Gateway policy evaluation (§4.1 step 3) falls through to the **default effect for unlisted tools**, which Global AI Rules fix at `require_approval`, never `allow`. This is deny-by-default: anything not explicitly allowed needs a human.
+3. The gateway creates an `approvals` row, `action_type = 'tool_access'`, and pauses the call (§4.1 step 4 / §5.4 mechanism B).
+4. The approval card shows exactly the fields the requirement asks for, using the existing flexible `approvals.payload` jsonb — no schema change needed for the payload shape itself:
+   ```json
+   {
+     "action_type": "tool_access",
+     "payload": {
+       "tool_name": "stripe-mcp",
+       "reason": "Task ACC-88 needs to look up a customer's subscription status",
+       "estimated_cost": "pay-per-call, ~$0.001/request",
+       "permissions_requested": ["read: customers", "read: subscriptions"]
+     }
+   }
+   ```
+5. The operator approves or rejects (§5.4). Only on approval does the gateway forward the call. Both the decision and any resulting policy change (if the operator chooses to allowlist the tool going forward) are events (§3.4).
+
+Global Rules → compiled policy defaults (seed data, extends the §5.4 table):
+
+| Governance rule (Tools category) | Compiles to |
+|---|---|
+| Free, already-allowlisted tools may be used automatically | `policies` row, `effect = allow` |
+| Paid tools require approval | `policies` row, `effect = require_approval`, `risk_level = medium` |
+| Third-party services/APIs require approval before first connection | `policies` row per new `server`, `effect = require_approval` until explicitly allowlisted |
+| Unknown external tools require approval | the gateway's **default** effect (no matching row) is `require_approval`, never `allow` |
+
+Rules that aren't tool-call-shaped ("run tests before completing a task," "review changes before merge") compile into `workflows.definition[].exit_checks` (already in the schema, §5.2) instead of `policies` rows — same governance source, a different enforcement point, because that's what the rule actually constrains.
+
+### 10.4 Database considerations (new in Phase 1.5)
+
+```sql
+-- ─── Global AI governance rules (the authored source of truth) ──────────
+CREATE TABLE governance_rules (
+  id            uuid PRIMARY KEY,
+  category      text NOT NULL,                 -- security | tools | code | infrastructure
+  statement     text NOT NULL,                  -- human-readable rule, e.g. "Never expose secrets"
+  enforcement   text NOT NULL,                  -- advisory | require_approval | hard_block
+  applies_to    text[] NOT NULL DEFAULT '{}',   -- capabilities this rule targets; empty = all
+  enabled       boolean NOT NULL DEFAULT true,
+  created_by    uuid REFERENCES users(id),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- Traceability: a policy row generated from a rule points back to it, and is
+-- read-only in the UI (edit the rule, not the generated policy) — mitigates R16.
+ALTER TABLE policies ADD COLUMN source_rule_id uuid REFERENCES governance_rules(id);
+
+-- approvals.action_type is already free text (§2.2): 'tool_access' joins
+-- merge | deploy | db_migration | db_write | shell_command | ... with no migration needed.
+
+-- ─── Per-project knowledge base ──────────────────────────────────────────
+CREATE TABLE project_context_entries (
+  id            uuid PRIMARY KEY,
+  project_id    uuid NOT NULL REFERENCES projects(id),
+  kind          text NOT NULL,                 -- architecture | convention | integration | gotcha | glossary
+  title         text NOT NULL,
+  body          text NOT NULL,                 -- markdown
+  priority      int NOT NULL DEFAULT 100,       -- render order within a project
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  updated_by    uuid REFERENCES users(id)
+);
+
+-- ─── Project-level status, distinct from any single task's status ───────
+ALTER TABLE projects ADD COLUMN status text NOT NULL DEFAULT 'active';
+                                        -- active | paused | archived
+
+-- ─── Project-level artifacts (README, ADRs), alongside task-level ones ──
+ALTER TABLE artifacts ALTER COLUMN task_id DROP NOT NULL;
+ALTER TABLE artifacts ADD COLUMN project_id uuid REFERENCES projects(id);
+ALTER TABLE artifacts ADD CONSTRAINT artifacts_task_or_project
+  CHECK (task_id IS NOT NULL OR project_id IS NOT NULL);
+```
+
+New event types extend the §3.4 catalogue: `governance_rule.created | governance_rule.updated | governance_rule.disabled`, `project.context_updated`, `project.status_changed`. Rule and context changes are events like everything else — every edit to a Global AI Rule is in the permanent, append-only history, same as a task status change.
+
+### 10.5 UI considerations (new in Phase 1.5)
+
+- **Project switcher** in the sidebar, replacing today's implicit single project. Each project keeps its own task board, agent activity and events, filtered by `project_id` (the API already supports this — §3.2's `GET /tasks?project_id=…`, `GET /events?project_id=…`).
+- **Project settings page:** context entries editor (markdown, grouped by `kind`), a status toggle (active/paused/archived), the repository list (already designed), and an artifacts tab for project-level artifacts.
+- **Global Rules page**, admin-only (existing `Role.ADMIN`): rules grouped by the four categories, each showing what it compiled to (which `policies` rows or `exit_checks`), so an operator sees cause and effect, not just intent. Editing is add/edit/disable, never a hard delete — disabling is an event, same as everything else.
+- **Approval card** gains a `tool_access` layout: requested tool, reason, estimated cost, permissions requested — one more card variant in the existing generic Approvals inbox (§5.4), not a new inbox.
+- **Context preview**, per task: "what will the agent actually see" — renders the four layers of §10.2 read-only, for trust and debugging, before a run starts.
+
+### 10.6 Phase placement
+
+See the inserted **Phase 1.5** row in §7. It sits between Phase 1 (dashboard shell) and Phase 2 (first real agent), for the reason in §10.0.
+
+### 10.7 A note on the parallel to §11
+
+The `docs/context/` layer described in §11 — a durable, per-repository knowledge base for whichever AI assistant is developing *this* codebase — is a specific instance of the "Project Context" idea in §10.1, just stored as files instead of `project_context_entries` rows because there's no running AI Command Center instance managing its own development yet. Worth remembering for later: once the product exists, dogfooding is available for free — this repository could be registered as one of the Command Center's own projects, and `docs/context/*.md` could seed that project's `project_context_entries`.
+
+---
+
+## 11. AI session continuity (`docs/context/`)
+
+This section is about how *any* AI assistant — this one or a future session, on this tool or another — keeps working effectively on this repository across separate conversations. It is not a runtime feature of the AI Command Center product itself (see §10.7 for the parallel), and adding it changes no code and no Phase 0/1 scope.
+
+### 11.1 The problem
+
+A new session starts with zero memory of this repository's history: which decisions were made and why, what has already been tried and failed, what the user's standing preferences are. Re-deriving all of that from `git log` and code reading is slow and lossy. A standing rule such as "wait for approval before each phase" has no durable, version-controlled home unless one is designed for it.
+
+### 11.2 The layer
+
+A plain-file documentation layer, `docs/context/`, alongside the existing `docs/adr/`:
+
+| File | Contents | Update cadence |
+|---|---|---|
+| `current-context.md` | A snapshot, not a log: current phase/milestone, what's in progress, immediate next steps | Rewritten each "save session" |
+| `decisions.md` | A running, dated log of decisions, one line to one paragraph each. Links out to the matching `docs/adr/NNNN-*.md` for anything that got the full ADR treatment | Appended each "save session" |
+| `lessons-learned.md` | Mistakes and their fixes — process and tooling knowledge, not product design (e.g. "PowerShell mangles nested quotes across `wsl.exe`; write scripts to disk and invoke them, don't inline `-c`") | Appended each "save session" |
+| `recurring-rules.md` | Standing working agreements from the user that apply to every future turn (e.g. "report files changed / tests passed / status / next step after each milestone") — never one-off task instructions | Appended, rarely |
+| `archive.md` | Anything superseded, moved here with a dated note of why, instead of deleted | Appended each "save session" |
+
+`decisions.md` versus `docs/adr/`: an ADR is for one significant, weighed decision with alternatives considered (`docs/adr/0001-command-layer-as-single-write-path.md` is the existing model). `decisions.md` is the lighter, faster log everything else goes in — smaller calls and operational choices worth remembering but not worth a whole ADR.
+
+### 11.3 The "save session" command
+
+When the user says **"save session"**, the assistant:
+
+1. Reviews the conversation and recent commits for anything decided → appends dated entries to `decisions.md`.
+2. Rewrites `current-context.md` from scratch to reflect the latest state — it is a snapshot, so stale content is replaced, not accumulated.
+3. Appends any new mistake-and-fix pairs to `lessons-learned.md`.
+4. Appends any new standing, durable rule the user gave to `recurring-rules.md`, filtering out anything specific to one task.
+5. Scans the active files for anything now superseded and moves it to `archive.md`, with a one-line dated note of why, rather than deleting it.
+
+This is a manual, explicit trigger, not something run on every turn — cheap at a natural checkpoint, wasteful continuously.
+
+### 11.4 Relationship to this assistant's own memory files
+
+This assistant already maintains a separate, private memory store outside this repository (this machine's local memory directory), with similarly named files (`acc-project-phases.md`, `wsl-dev-environment.md`). The distinction:
+
+- `docs/context/` is **in the repository**, git-tracked, and visible to any collaborator or any AI tool that opens this codebase — the durable, shared source of truth.
+- The private memory files are **local to one machine and one tool** — a fast index pointing at what matters, convenient but not portable and not visible to a teammate, human or AI.
+
+Once `docs/context/` exists, the private memory files should shrink to pointers into it rather than duplicating its content. That reconciliation happens after this update is approved, not as part of it.
