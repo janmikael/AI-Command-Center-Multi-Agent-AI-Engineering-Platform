@@ -47,6 +47,8 @@ class Task(Base):
     priority: Mapped[int] = mapped_column(SmallInteger, server_default=text("3"))
     assigned_agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agents.id"))
     required_capability: Mapped[str | None] = mapped_column(Text)
+    # Populated once the developer agent pushes a branch (Phase 2).
+    branch_name: Mapped[str | None] = mapped_column(Text)
     # Derived by the orchestrator from subtasks/criteria (Phase 4). No API writes it.
     progress_pct: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
     created_by: Mapped[uuid.UUID | None] = mapped_column(

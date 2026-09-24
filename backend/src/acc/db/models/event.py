@@ -22,6 +22,7 @@ class Event(Base):
         Index("ix_events_seq", "seq"),
         Index("ix_events_task_id_ts", "task_id", "ts"),
         Index("ix_events_agent_id_ts", "agent_id", "ts"),
+        Index("ix_events_run_id_ts", "run_id", "ts"),
         Index("ix_events_project_id_ts", "project_id", "ts"),
         Index("ix_events_type_ts", "type", "ts"),
         {"postgresql_partition_by": "RANGE (ts)"},
@@ -36,6 +37,7 @@ class Event(Base):
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
     task_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tasks.id"))
     agent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agents.id"))
+    run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("agent_runs.id"))
     actor: Mapped[str] = mapped_column(Text)
     type: Mapped[str] = mapped_column(Text)
     severity: Mapped[str] = mapped_column(Text, server_default="info")

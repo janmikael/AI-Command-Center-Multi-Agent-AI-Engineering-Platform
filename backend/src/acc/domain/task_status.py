@@ -76,3 +76,34 @@ def validate_transition(current: TaskStatus, target: TaskStatus) -> None:
             target=target.value,
             allowed=[s.value for s in allowed_transitions(current)],
         )
+
+
+# Phase 2: which already-legal moves (see OPERATOR_TRANSITIONS above) the orchestrator,
+# as an actor, may trigger automatically when a run finishes. This is an authorization
+# subset, not a new set of state transitions — validate_transition() is unchanged and
+# still the only thing that decides legality. review→completed is deliberately excluded:
+# a run finishing review is not enough to complete a task by itself (Guiding Principle 3,
+# "agents propose, the platform executes... after human approval").
+ORCHESTRATOR_ALLOWED: frozenset[tuple[TaskStatus, TaskStatus]] = frozenset(
+    {
+        (_S.WORKING, _S.REVIEW),  # run succeeded
+        (_S.WORKING, _S.FAILED),  # run failed
+        (_S.WORKING, _S.BLOCKED),  # run cancelled or timed out; operator decides next
+    }
+)
+
+
+def validate_orchestrator_transition(current: TaskStatus, target: TaskStatus) -> None:
+    """Like validate_transition, but also enforces the narrower ORCHESTRATOR_ALLOWED set.
+
+    Used only by acc.commands.runs; the operator-facing transition endpoint always uses
+    validate_transition directly and is unaffected by this restriction.
+    """
+    validate_transition(current, target)
+    if (current, target) not in ORCHESTRATOR_ALLOWED:
+        raise InvalidTransition(
+            f"Orchestrator is not allowed to move a task from {current.value} to {target.value}",
+            current=current.value,
+            target=target.value,
+            allowed=[t.value for (f, t) in ORCHESTRATOR_ALLOWED if f == current],
+        )

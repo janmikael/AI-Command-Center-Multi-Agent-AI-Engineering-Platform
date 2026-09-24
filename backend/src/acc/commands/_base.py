@@ -48,6 +48,7 @@ class UnitOfWork:
         project_id: uuid.UUID | None = None,
         task_id: uuid.UUID | None = None,
         agent_id: uuid.UUID | None = None,
+        run_id: uuid.UUID | None = None,
         task_key: str | None = None,
         agent_slug: str | None = None,
     ) -> EventRecord:
@@ -60,6 +61,7 @@ class UnitOfWork:
             project_id=project_id,
             task_id=task_id,
             agent_id=agent_id,
+            run_id=run_id,
             payload=payload.model_dump(mode="json"),
         )
         self.session.add(row)
@@ -74,6 +76,7 @@ class UnitOfWork:
             project_id=row.project_id,
             task_id=row.task_id,
             agent_id=row.agent_id,
+            run_id=row.run_id,
             task_key=task_key,
             agent_slug=agent_slug,
             payload=row.payload,

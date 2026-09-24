@@ -27,6 +27,7 @@ class Agent(Base):
     adapter: Mapped[str] = mapped_column(Text, server_default="none")
     model: Mapped[str | None] = mapped_column(Text)
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    max_concurrent_runs: Mapped[int] = mapped_column(server_default=text("1"))
     enabled: Mapped[bool] = mapped_column(server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

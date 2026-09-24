@@ -17,6 +17,7 @@ EVENT = EventRecord(
     project_id=uuid.UUID(int=3),
     task_id=uuid.UUID(int=4),
     agent_id=None,
+    run_id=None,
     task_key="ACC-1",
     agent_slug=None,
     payload={"title": "Add health endpoint"},
@@ -26,7 +27,7 @@ EVENT = EventRecord(
 def test_wire_dict_has_exactly_the_expected_fields() -> None:
     assert set(as_wire_dict(EVENT)) == {
         "id", "seq", "ts", "type", "severity", "actor",
-        "project_id", "task_id", "agent_id", "task_key", "agent_slug", "payload",
+        "project_id", "task_id", "agent_id", "run_id", "task_key", "agent_slug", "payload",
     }  # fmt: skip
 
 

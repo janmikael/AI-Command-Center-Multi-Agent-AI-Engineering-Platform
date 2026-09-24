@@ -93,7 +93,7 @@ type = "forbidden"
 source_modules = ["acc.domain"]
 forbidden_modules = [
     "acc.api", "acc.commands", "acc.queries", "acc.db", "acc.realtime", "acc.cli",
-    "sqlalchemy", "fastapi", "redis", "asyncpg",
+    "acc.orchestrator", "sqlalchemy", "fastapi", "redis", "asyncpg",
 ]
 
 [[tool.importlinter.contracts]]
@@ -109,7 +109,7 @@ name = "Layering"
 type = "layers"
 layers = [
     "acc.cli",
-    "acc.api",
+    "acc.api | acc.orchestrator",
     "acc.commands | acc.queries | acc.realtime",
     "acc.db",
     "acc.domain",

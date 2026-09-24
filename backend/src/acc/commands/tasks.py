@@ -15,18 +15,13 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from acc.commands import runs as run_commands
 from acc.commands._base import EventSink, UnitOfWork, unit_of_work
+from acc.commands._task_mutations import agent_slug_for, apply_status_change
 from acc.db.models import Agent, Project, Repository, Task
 from acc.db.session import SessionFactory
 from acc.domain.errors import Conflict, NotFound, StaleVersion
-from acc.domain.events import (
-    EventType,
-    FieldChange,
-    TaskAssigned,
-    TaskCreated,
-    TaskStatusChanged,
-    TaskUpdated,
-)
+from acc.domain.events import EventType, FieldChange, TaskAssigned, TaskCreated, TaskUpdated
 from acc.domain.task_status import TERMINAL, TaskStatus, validate_transition
 from acc.ids import utcnow
 
@@ -63,13 +58,6 @@ async def _enabled_agent(session: AsyncSession, slug: str) -> Agent:
     if not agent.enabled:
         raise Conflict(f"Agent {slug} is disabled", agent=slug)
     return agent
-
-
-async def _agent_slug(session: AsyncSession, agent_id: uuid.UUID | None) -> str | None:
-    if agent_id is None:
-        return None
-    slug: str | None = await session.scalar(select(Agent.slug).where(Agent.id == agent_id))
-    return slug
 
 
 def _touch(task: Task) -> None:
@@ -224,26 +212,29 @@ async def transition_task(
     to: TaskStatus,
     reason: str | None = None,
 ) -> TaskRef:
-    """The single path for status changes. Validated by the domain state machine."""
+    """The single path for status changes. Validated by the domain state machine.
+
+    Phase 2 side effect (PLAN-PHASE-2.md §0.1): landing on WORKING with a runnable agent
+    assigned enqueues a start_run job in this same transaction, per ADR-2. This is the
+    only place Phase 2 touches a Phase 1 command — everything else is additive.
+    """
     async with unit_of_work(sf, sink) as uow:
         task = await _lock_task(uow.session, key)
         _check_version(task, expected_version)
-        previous = task.status
-        validate_transition(previous, to)
+        validate_transition(task.status, to)
+        await apply_status_change(uow, task, to, actor=actor, reason=reason or None)
 
-        task.status = to
-        if to == TaskStatus.COMPLETED:
-            task.completed_at = utcnow()
-        _touch(task)
-        await _emit_task(
-            uow,
-            task,
-            EventType.TASK_STATUS_CHANGED,
-            TaskStatusChanged(from_status=previous, to_status=to, reason=reason or None),
-            actor=actor,
-            agent_id=task.assigned_agent_id,
-            agent_slug=await _agent_slug(uow.session, task.assigned_agent_id),
-        )
+        if to == TaskStatus.WORKING and task.assigned_agent_id is not None:
+            agent = await uow.session.get(Agent, task.assigned_agent_id)
+            if agent is not None and agent.adapter != "none" and agent.enabled:
+                await run_commands.enqueue_start_run_in_uow(
+                    uow,
+                    actor=actor,
+                    task_id=task.id,
+                    task_key=task.key,
+                    agent_id=agent.id,
+                    agent_slug=agent.slug,
+                )
         return TaskRef(id=task.id, key=task.key, version=task.version)
 
 
@@ -270,7 +261,7 @@ async def assign_task(
             return TaskRef(id=task.id, key=task.key, version=task.version)  # no-op, no event
 
         previous_id = task.assigned_agent_id
-        previous_slug = await _agent_slug(s, previous_id)
+        previous_slug = await agent_slug_for(s, previous_id)
         task.assigned_agent_id = new_id
         _touch(task)
         await _emit_task(

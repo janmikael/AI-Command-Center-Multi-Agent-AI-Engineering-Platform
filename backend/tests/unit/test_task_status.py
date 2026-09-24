@@ -10,9 +10,11 @@ from acc.domain.task_status import (
     ACTIVE,
     BOARD_COLUMNS,
     OPERATOR_TRANSITIONS,
+    ORCHESTRATOR_ALLOWED,
     TERMINAL,
     TaskStatus,
     allowed_transitions,
+    validate_orchestrator_transition,
     validate_transition,
 )
 
@@ -77,3 +79,37 @@ def test_allowed_transitions_are_in_stable_order() -> None:
 
 def test_active_set() -> None:
     assert {S.PLANNING, S.WORKING, S.REVIEW} == ACTIVE
+
+
+class TestOrchestratorAllowed:
+    def test_is_a_subset_of_the_operator_table(self) -> None:
+        for current, target in ORCHESTRATOR_ALLOWED:
+            assert target in OPERATOR_TRANSITIONS[current]
+
+    def test_review_to_completed_is_excluded(self) -> None:
+        """A run finishing review is not enough to complete a task by itself
+        (Guiding Principle 3) — completion stays a human, operator-only action."""
+        assert (S.REVIEW, S.COMPLETED) not in ORCHESTRATOR_ALLOWED
+
+    @pytest.mark.parametrize(
+        "target", [S.REVIEW, S.FAILED, S.BLOCKED], ids=lambda s: s.value
+    )
+    def test_orchestrator_may_move_working_to(self, target: TaskStatus) -> None:
+        validate_orchestrator_transition(S.WORKING, target)
+
+    def test_orchestrator_may_not_move_working_to_cancelled(self) -> None:
+        """Legal for the operator, but not something the orchestrator triggers on its
+        own — cancellation goes through the explicit request_cancel path instead."""
+        with pytest.raises(InvalidTransition) as excinfo:
+            validate_orchestrator_transition(S.WORKING, S.CANCELLED)
+        assert sorted(excinfo.value.details["allowed"]) == ["blocked", "failed", "review"]  # type: ignore[call-overload]
+
+    def test_orchestrator_may_not_move_review_to_completed(self) -> None:
+        with pytest.raises(InvalidTransition):
+            validate_orchestrator_transition(S.REVIEW, S.COMPLETED)
+
+    def test_still_rejects_moves_illegal_for_anyone(self) -> None:
+        """An orchestrator-illegal move that's also operator-illegal still reports as a
+        plain invalid transition, not the narrower orchestrator message."""
+        with pytest.raises(InvalidTransition):
+            validate_orchestrator_transition(S.COMPLETED, S.WORKING)

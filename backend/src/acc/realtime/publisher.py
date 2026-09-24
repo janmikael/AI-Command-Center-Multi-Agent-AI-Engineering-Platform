@@ -38,6 +38,7 @@ def as_wire_dict(event: EventRecord) -> dict[str, Any]:
         "project_id": event.project_id,
         "task_id": event.task_id,
         "agent_id": event.agent_id,
+        "run_id": event.run_id,
         "task_key": event.task_key,
         "agent_slug": event.agent_slug,
         "payload": event.payload,

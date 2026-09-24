@@ -18,6 +18,7 @@ from acc.domain.task_status import TaskStatus
 # ─── Actors ──────────────────────────────────────────────────────────────
 SYSTEM = "system"
 SIMULATOR = "system:simulator"
+ORCHESTRATOR = "system:orchestrator"
 
 
 def user_actor(user_id: uuid.UUID) -> str:
@@ -46,6 +47,14 @@ class EventType(StrEnum):
     PROJECT_CONTEXT_ENTRY_CREATED = "project_context_entry.created"
     PROJECT_CONTEXT_ENTRY_UPDATED = "project_context_entry.updated"
     PROJECT_CONTEXT_ENTRY_DELETED = "project_context_entry.deleted"
+    RUN_QUEUED = "run.queued"
+    RUN_STARTED = "run.started"
+    RUN_STEP = "run.step"
+    RUN_HEARTBEAT_MISSED = "run.heartbeat_missed"
+    RUN_SUCCEEDED = "run.succeeded"
+    RUN_FAILED = "run.failed"
+    RUN_CANCELLED = "run.cancelled"
+    RUN_TIMED_OUT = "run.timed_out"
 
 
 # Events that count as an agent's *own* activity for derived status. Things done *to* an
@@ -165,6 +174,49 @@ class ProjectContextEntryDeleted(Payload):
     title: str
 
 
+# run_id has nowhere else to live on the wire event until §1.6's internal API and the
+# events.run_id column (migration 0014) both exist, so every run payload below carries it
+# explicitly — same lightweight principle as governance rules carrying their id (above).
+class RunQueued(Payload):
+    id: uuid.UUID
+    task_key: str
+    agent_slug: str
+
+
+class RunStarted(Payload):
+    id: uuid.UUID
+    container_id: str
+
+
+class RunStep(Payload):
+    id: uuid.UUID
+    text: str = Field(min_length=1, max_length=500)
+
+
+class RunHeartbeatMissed(Payload):
+    id: uuid.UUID
+    last_heartbeat_at: datetime | None
+
+
+class RunSucceeded(Payload):
+    id: uuid.UUID
+    result_summary: str = Field(max_length=4000)
+
+
+class RunFailed(Payload):
+    id: uuid.UUID
+    reason: str = Field(max_length=4000)
+
+
+class RunCancelled(Payload):
+    id: uuid.UUID
+    reason: str = Field(max_length=500)
+
+
+class RunTimedOut(Payload):
+    id: uuid.UUID
+
+
 PAYLOAD_SCHEMAS: dict[EventType, type[Payload]] = {
     EventType.PROJECT_CREATED: ProjectCreated,
     EventType.REPOSITORY_ADDED: RepositoryAdded,
@@ -182,6 +234,14 @@ PAYLOAD_SCHEMAS: dict[EventType, type[Payload]] = {
     EventType.PROJECT_CONTEXT_ENTRY_CREATED: ProjectContextEntryCreated,
     EventType.PROJECT_CONTEXT_ENTRY_UPDATED: ProjectContextEntryUpdated,
     EventType.PROJECT_CONTEXT_ENTRY_DELETED: ProjectContextEntryDeleted,
+    EventType.RUN_QUEUED: RunQueued,
+    EventType.RUN_STARTED: RunStarted,
+    EventType.RUN_STEP: RunStep,
+    EventType.RUN_HEARTBEAT_MISSED: RunHeartbeatMissed,
+    EventType.RUN_SUCCEEDED: RunSucceeded,
+    EventType.RUN_FAILED: RunFailed,
+    EventType.RUN_CANCELLED: RunCancelled,
+    EventType.RUN_TIMED_OUT: RunTimedOut,
 }
 
 
@@ -205,6 +265,7 @@ class EventRecord:
     project_id: uuid.UUID | None
     task_id: uuid.UUID | None
     agent_id: uuid.UUID | None
+    run_id: uuid.UUID | None
     task_key: str | None
     agent_slug: str | None
     payload: dict[str, Any]

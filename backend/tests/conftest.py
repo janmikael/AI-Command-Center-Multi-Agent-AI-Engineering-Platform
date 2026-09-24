@@ -83,7 +83,11 @@ def settings(test_urls: DbUrls, migrated: Config) -> Settings:
     )
 
 
-ALL_TABLES = "events, tasks, agent_capabilities, agents, repositories, projects, sessions, users"
+ALL_TABLES = (
+    "events, tool_calls, file_changes, usage_records, agent_runs, jobs, "
+    "governance_rules, project_context_entries, "
+    "tasks, agent_capabilities, agents, repositories, projects, sessions, users"
+)
 
 
 @pytest.fixture
