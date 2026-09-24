@@ -41,6 +41,13 @@ class EventType(StrEnum):
     AGENT_DECISION = "agent.decision"
 
 
+# Events that count as an agent's *own* activity for derived status. Things done *to* an
+# agent (being assigned a task, being registered) deliberately don't count.
+AGENT_ACTIVITY_TYPES: frozenset[EventType] = frozenset(
+    {EventType.AGENT_MESSAGE, EventType.AGENT_DECISION}
+)
+
+
 class Severity(StrEnum):
     DEBUG = "debug"
     INFO = "info"

@@ -171,6 +171,14 @@ async def operator(app: FastAPI) -> Credentials:
 
 
 @pytest.fixture
+async def seeded(app: FastAPI) -> None:
+    """Default project 'acc' (key ACC) and the architect/developer/designer agents."""
+    from acc.commands.seed import seed
+
+    await seed(app.state.session_factory)
+
+
+@pytest.fixture
 async def signed_in(client: httpx.AsyncClient, operator: Credentials) -> httpx.AsyncClient:
     response = await client.post(
         "/api/v1/auth/login", json={"email": operator.email, "password": operator.password}

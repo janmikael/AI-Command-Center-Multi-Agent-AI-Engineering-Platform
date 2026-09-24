@@ -10,7 +10,7 @@ from acc import __version__
 from acc.api.deps import require_same_origin
 from acc.api.errors import register_error_handlers
 from acc.api.middleware import RequestContextMiddleware
-from acc.api.routers import auth, health
+from acc.api.routers import agents, auth, events, health, overview, projects, tasks
 from acc.commands.maintenance import ensure_event_partitions
 from acc.config import Settings, get_settings
 from acc.db.migrations import alembic_head
@@ -74,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router)
     v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(require_same_origin)])
-    v1.include_router(auth.router)
+    for module in (auth, overview, agents, projects, tasks, events):
+        v1.include_router(module.router)
     app.include_router(v1)
     return app

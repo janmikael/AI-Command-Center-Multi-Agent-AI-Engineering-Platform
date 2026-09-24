@@ -1,13 +1,15 @@
 """FastAPI dependencies: app resources, authentication, CSRF origin check."""
 
+import re
 from datetime import timedelta
 from typing import Annotated
 
 import structlog
-from fastapi import Depends, Request
+from fastapi import Depends, Header, HTTPException, Request
 from redis.asyncio import Redis
 
 from acc.commands import auth as auth_commands
+from acc.commands._base import EventSink
 from acc.config import Settings
 from acc.db.session import SessionFactory
 from acc.domain.auth import Operator
@@ -74,3 +76,40 @@ async def current_operator(
 
 
 OperatorDep = Annotated[Operator, Depends(current_operator)]
+
+
+def get_event_sink(request: Request) -> EventSink | None:
+    """Realtime publisher for committed events (None when realtime isn't configured)."""
+    sink: EventSink | None = getattr(request.app.state, "event_sink", None)
+    return sink
+
+
+EventSinkDep = Annotated[EventSink | None, Depends(get_event_sink)]
+
+_VERSION_TAG = re.compile(r'^(?:W/)?"?(\d{1,9})"?$')
+
+
+def _parse_version(raw: str) -> int:
+    match = _VERSION_TAG.match(raw.strip())
+    if match is None:
+        raise HTTPException(400, 'If-Match must be the resource version, e.g. If-Match: "3"')
+    return int(match.group(1))
+
+
+def expected_version(if_match: Annotated[str | None, Header()] = None) -> int:
+    """Optimistic locking: mutations must say which version they were based on."""
+    if if_match is None:
+        raise HTTPException(428, "If-Match header with the current task version is required")
+    return _parse_version(if_match)
+
+
+def optional_version(if_match: Annotated[str | None, Header()] = None) -> int | None:
+    return None if if_match is None else _parse_version(if_match)
+
+
+ExpectedVersion = Annotated[int, Depends(expected_version)]
+OptionalVersion = Annotated[int | None, Depends(optional_version)]
+
+
+def etag(version: int) -> str:
+    return f'"{version}"'
