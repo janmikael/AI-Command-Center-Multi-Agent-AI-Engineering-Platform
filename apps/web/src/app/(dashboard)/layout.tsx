@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { AppProviders } from "@/components/providers/app-providers";
+import { LiveIndicator } from "@/components/shell/live-indicator";
 import { Nav } from "@/components/shell/nav";
 import { OperatorMenu } from "@/components/shell/operator-menu";
 import { SystemStatus } from "@/components/shell/system-status";
@@ -11,32 +13,35 @@ export default async function DashboardLayout({ children }: LayoutProps<"/">) {
   if (!operator) redirect("/login");
 
   return (
-    <div className="flex min-h-dvh">
-      <aside className="hidden w-56 shrink-0 flex-col border-r bg-sidebar px-3 py-4 md:flex">
-        <div className="mb-6 flex items-center gap-2 px-2.5">
-          <div
-            aria-hidden
-            className="grid size-7 place-items-center rounded-lg bg-primary font-mono text-[11px] font-semibold text-primary-foreground"
-          >
-            AC
+    <AppProviders>
+      <div className="flex min-h-dvh">
+        <aside className="hidden w-56 shrink-0 flex-col border-r bg-sidebar px-3 py-4 md:flex">
+          <div className="mb-6 flex items-center gap-2 px-2.5">
+            <div
+              aria-hidden
+              className="grid size-7 place-items-center rounded-lg bg-primary font-mono text-[11px] font-semibold text-primary-foreground"
+            >
+              AC
+            </div>
+            <span className="text-sm font-semibold tracking-tight">Command Center</span>
           </div>
-          <span className="text-sm font-semibold tracking-tight">Command Center</span>
-        </div>
-        <Nav />
-      </aside>
+          <Nav />
+        </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/80 px-4 backdrop-blur md:px-8">
-          <div className="md:hidden">
-            <Nav orientation="horizontal" />
-          </div>
-          <div className="ml-auto flex items-center gap-3 sm:gap-4">
-            <SystemStatus />
-            <OperatorMenu operator={operator} />
-          </div>
-        </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 md:px-8">{children}</main>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-4 border-b bg-background/80 px-4 backdrop-blur md:px-8">
+            <div className="md:hidden">
+              <Nav orientation="horizontal" />
+            </div>
+            <div className="ml-auto flex items-center gap-3 sm:gap-4">
+              <LiveIndicator />
+              <SystemStatus />
+              <OperatorMenu operator={operator} />
+            </div>
+          </header>
+          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 md:px-8">{children}</main>
+        </div>
       </div>
-    </div>
+    </AppProviders>
   );
 }
