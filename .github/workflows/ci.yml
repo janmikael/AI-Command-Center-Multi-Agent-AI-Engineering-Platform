@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (lint, types, contracts, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run lint-imports
+      - name: Start Postgres + Redis
+        working-directory: .
+        run: |
+          scripts/init-env.sh
+          docker compose -f compose.yml -f compose.dev.yml up -d --wait postgres redis
+      - name: Tests (unit + integration)
+        working-directory: .
+        env:
+          ACC_REQUIRE_INTEGRATION: "1"
+        run: scripts/test-backend.sh -v
+      - name: API client is up to date
+        run: |
+          uv run acc openapi -o ../apps/web/openapi/schema.json
+          git diff --exit-code -- ../apps/web/openapi/schema.json \
+            || (echo "::error::OpenAPI schema is stale. Run 'make gen-client' and commit." && exit 1)
+
+  web:
+    name: Web (lint, types, tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Typed client matches committed OpenAPI schema
+        run: |
+          pnpm gen:api
+          git diff --exit-code -- src/lib/api/schema.d.ts \
+            || (echo "::error::schema.d.ts is stale. Run 'make gen-client' and commit." && exit 1)
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  smoke:
+    name: Compose smoke test
+    needs: [backend, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/init-env.sh
+      - name: Build and start the stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+      - name: End-to-end smoke test through Caddy
+        run: scripts/smoke.sh
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

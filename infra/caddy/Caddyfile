@@ -1,0 +1,27 @@
+{
+	# No runtime config API; config changes go through a container restart.
+	admin off
+}
+
+# ":80" in development (plain HTTP on any host name). In production set
+# ACC_SITE_ADDRESS to the real host name and Caddy provisions TLS automatically.
+{$ACC_SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# Same origin for UI and API: no CORS, and SameSite=Strict cookies just work.
+	@api path /api/* /ws /ws/* /healthz /readyz
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header -Server
+
+	log {
+		output stdout
+		format json
+	}
+}

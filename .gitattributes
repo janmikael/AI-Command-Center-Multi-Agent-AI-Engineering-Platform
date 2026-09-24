@@ -1,0 +1,9 @@
+# Normalize everything to LF. Shell scripts and Dockerfiles break in Linux
+# containers if they are checked out with CRLF on Windows.
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary

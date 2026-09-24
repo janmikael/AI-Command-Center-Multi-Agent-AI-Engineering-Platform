@@ -1,0 +1,116 @@
+[project]
+name = "acc"
+version = "0.1.0"
+description = "AI Command Center: backend (API, commands, orchestrator)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "email-validator>=2.2",
+    "structlog>=24.4",
+    "argon2-cffi>=23.1",
+    "redis>=5.2",
+    "uuid-utils>=0.9",
+    "typer>=0.13",
+]
+
+[project.scripts]
+acc = "acc.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "asgi-lifespan>=2.1",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "import-linter>=2.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/acc"]
+
+# ─── Ruff ────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "SIM", "RUF", "N", "PT"]
+ignore = [
+    "S101", # assert is fine in tests
+    "N818", # domain errors are named for what happened (NotFound, Conflict), not "...Error"
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106"]  # hard-coded test passwords
+"alembic/versions/**" = ["N999"]
+
+# ─── Mypy ────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.13"
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+files = ["src", "tests"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = "acc.domain.*"
+strict = true
+
+# ─── Pytest ──────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: needs Postgres + Redis (docker compose dev services)",
+]
+filterwarnings = ["error::DeprecationWarning:acc.*"]
+
+# ─── Architecture rules (import-linter) ─────────────────────────────────
+[tool.importlinter]
+root_package = "acc"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is pure: no I/O frameworks, no outer layers"
+type = "forbidden"
+source_modules = ["acc.domain"]
+forbidden_modules = [
+    "acc.api", "acc.commands", "acc.queries", "acc.db", "acc.realtime", "acc.cli",
+    "sqlalchemy", "fastapi", "redis", "asyncpg",
+]
+
+[[tool.importlinter.contracts]]
+name = "API never touches ORM models: writes go through acc.commands, reads through acc.queries"
+type = "forbidden"
+source_modules = ["acc.api"]
+forbidden_modules = ["acc.db.models"]
+# Reaching models *through* acc.commands / acc.queries is the intended path.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Layering"
+type = "layers"
+layers = [
+    "acc.cli",
+    "acc.api",
+    "acc.commands | acc.queries",
+    "acc.db",
+    "acc.domain",
+]

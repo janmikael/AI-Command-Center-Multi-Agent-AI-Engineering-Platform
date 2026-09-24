@@ -1,0 +1,26 @@
+# Production overrides. Requires in .env:
+#   ACC_ENV=production
+#   ACC_PUBLIC_ORIGIN=https://<your-host>
+#   ACC_SITE_ADDRESS=<your-host>        (Caddy obtains the TLS certificate)
+services:
+  api:
+    deploy:
+      resources:
+        limits: { memory: 512M }
+  web:
+    deploy:
+      resources:
+        limits: { memory: 512M }
+  postgres:
+    deploy:
+      resources:
+        limits: { memory: 1G }
+  redis:
+    deploy:
+      resources:
+        limits: { memory: 256M }
+
+networks:
+  # Data services and app containers get no route to the internet.
+  internal:
+    internal: true
