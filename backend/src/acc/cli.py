@@ -66,11 +66,16 @@ def create_operator(
 
 @app.command("seed")
 def seed() -> None:
-    """Create the default project and agents if missing (idempotent; never edits rows)."""
+    """Create the default project, agents and governance rules if missing (idempotent;
+    never edits existing rows)."""
     from acc.commands.seed import seed as run_seed
 
     result = _run_with_db(lambda sf, _: run_seed(sf))
-    created = [*result.created_projects, *result.created_agents]
+    created = [
+        *result.created_projects,
+        *result.created_agents,
+        *result.created_governance_rules,
+    ]
     typer.echo(f"Seed: created {', '.join(created)}" if created else "Seed: nothing to do")
 
 

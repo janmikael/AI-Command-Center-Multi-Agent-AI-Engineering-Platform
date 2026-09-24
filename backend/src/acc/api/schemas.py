@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, 
 
 from acc.domain.agent_status import AgentStatus
 from acc.domain.auth import Operator, Role
+from acc.domain.governance import RuleCategory, RuleEffect
+from acc.domain.project_context import ContextEntryKind
 from acc.domain.task_status import TaskStatus
 
 
@@ -253,6 +255,93 @@ class RepositoryCreateIn(ApiModel):
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
     ]
     default_branch: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._/-]{1,100}$")] = "main"
+
+
+# ─── Governance ──────────────────────────────────────────────────────────
+RuleTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+RuleStatement = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)
+]
+
+
+class GovernanceRuleOut(OutModel):
+    id: uuid.UUID
+    category: RuleCategory
+    title: str
+    statement: str
+    effect: RuleEffect
+    applies_to: list[str]
+    priority: int
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class GovernanceRuleList(ApiModel):
+    items: list[GovernanceRuleOut]
+
+
+class GovernanceRuleCreateIn(ApiModel):
+    category: RuleCategory
+    title: RuleTitle
+    statement: RuleStatement
+    effect: RuleEffect
+
+
+class GovernanceRulePatchIn(ApiModel):
+    """title / statement / effect only — category is fixed at creation, and
+    match / applies_to / priority stay API-only for this phase (see PLAN-PHASE-1.5.md)."""
+
+    title: RuleTitle | None = None
+    statement: RuleStatement | None = None
+    effect: RuleEffect | None = None
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("Provide at least one field to change")
+        for field in self.model_fields_set:
+            if getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+
+# ─── Project context ─────────────────────────────────────────────────────
+class ContextEntryOut(OutModel):
+    id: uuid.UUID
+    kind: ContextEntryKind
+    title: str
+    body: str
+    priority: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ContextEntryList(ApiModel):
+    items: list[ContextEntryOut]
+
+
+class ContextEntryCreateIn(ApiModel):
+    kind: ContextEntryKind
+    title: RuleTitle
+    body: Annotated[str, StringConstraints(max_length=20_000)] = ""
+    priority: int = Field(default=100, ge=1, le=1000)
+
+
+class ContextEntryPatchIn(ApiModel):
+    kind: ContextEntryKind | None = None
+    title: RuleTitle | None = None
+    body: Annotated[str, StringConstraints(max_length=20_000)] | None = None
+    priority: Annotated[int, Field(ge=1, le=1000)] | None = None
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("Provide at least one field to change")
+        for field in self.model_fields_set:
+            if getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
 
 
 # ─── Overview ────────────────────────────────────────────────────────────

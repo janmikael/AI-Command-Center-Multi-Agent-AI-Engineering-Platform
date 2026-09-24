@@ -20,4 +20,8 @@ export const queryKeys = {
     all: ["events"] as const,
     list: (filters: object = {}) => ["events", "list", filters] as const,
   },
+  governance: {
+    all: ["governance"] as const,
+    rules: (filters: object = {}) => ["governance", "rules", filters] as const,
+  },
 };

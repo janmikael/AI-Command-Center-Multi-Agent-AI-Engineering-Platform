@@ -1,8 +1,9 @@
-"""Idempotent seed: the default project and the three Phase 1 agents.
+"""Idempotent seed: the default project, the three Phase 1 agents, and the Global AI
+Governance rules from the original brief.
 
 Safe to run on every deploy. Existing rows are never modified (an operator may have
-edited or disabled an agent); only missing rows and capabilities are added, and an
-event is emitted only for what was actually created.
+edited or disabled an agent, or edited a governance rule); only missing rows are added,
+and an event is emitted only for what was actually created.
 """
 
 from dataclasses import dataclass, field
@@ -11,9 +12,15 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from acc.commands._base import EventSink, unit_of_work
-from acc.db.models import Agent, AgentCapability, Project
+from acc.db.models import Agent, AgentCapability, GovernanceRule, Project
 from acc.db.session import SessionFactory
-from acc.domain.events import SYSTEM, AgentRegistered, EventType, ProjectCreated
+from acc.domain.events import (
+    SYSTEM,
+    AgentRegistered,
+    EventType,
+    GovernanceRuleCreated,
+    ProjectCreated,
+)
 
 
 @dataclass(frozen=True)
@@ -57,10 +64,79 @@ AGENTS: tuple[AgentSeed, ...] = (
 )
 
 
+# (category, title, statement, effect) — verbatim from the original governance brief.
+GOVERNANCE_RULES: tuple[tuple[str, str, str, str], ...] = (
+    ("security", "Never expose secrets", "Never expose secrets.", "deny"),
+    (
+        "security",
+        "Never access protected credentials",
+        "Never access protected credentials.",
+        "deny",
+    ),
+    (
+        "security",
+        "Never bypass approval requirements",
+        "Never bypass approval requirements.",
+        "deny",
+    ),
+    (
+        "tools",
+        "Free tools can be used automatically",
+        "Free tools can be used automatically.",
+        "allow",
+    ),
+    ("tools", "Paid tools require approval", "Paid tools require approval.", "require_approval"),
+    (
+        "tools",
+        "Third-party services/APIs require approval",
+        "Third-party services/APIs require approval before connection.",
+        "require_approval",
+    ),
+    (
+        "tools",
+        "Unknown external tools require approval",
+        "Unknown external tools require approval.",
+        "require_approval",
+    ),
+    (
+        "code",
+        "Run tests before completing tasks",
+        "Run tests before completing tasks.",
+        "advisory",
+    ),
+    ("code", "Review changes before merge", "Review changes before merge.", "advisory"),
+    (
+        "code",
+        "Never delete important files without approval",
+        "Never delete important files without approval.",
+        "require_approval",
+    ),
+    (
+        "infrastructure",
+        "Production deployment requires approval",
+        "Production deployment requires approval.",
+        "require_approval",
+    ),
+    (
+        "infrastructure",
+        "Database migrations require approval",
+        "Database migrations require approval.",
+        "require_approval",
+    ),
+    (
+        "infrastructure",
+        "Destructive commands require approval",
+        "Destructive commands require approval.",
+        "require_approval",
+    ),
+)
+
+
 @dataclass
 class SeedResult:
     created_projects: list[str] = field(default_factory=list)
     created_agents: list[str] = field(default_factory=list)
+    created_governance_rules: list[str] = field(default_factory=list)
 
 
 async def seed(sf: SessionFactory, sink: EventSink | None = None) -> SeedResult:
@@ -128,5 +204,26 @@ async def seed(sf: SessionFactory, sink: EventSink | None = None) -> SeedResult:
                     actor=SYSTEM,
                     agent_id=agent_id,
                     agent_slug=spec.slug,
+                )
+
+        for category, title, statement, effect in GOVERNANCE_RULES:
+            rule_id = await s.scalar(
+                insert(GovernanceRule)
+                .values(category=category, title=title, statement=statement, effect=effect)
+                .on_conflict_do_nothing(index_elements=["title"])
+                .returning(GovernanceRule.id)
+            )
+            if rule_id is not None:
+                result.created_governance_rules.append(title)
+                await uow.emit(
+                    EventType.GOVERNANCE_RULE_CREATED,
+                    GovernanceRuleCreated(
+                        id=rule_id,
+                        category=category,
+                        title=title,
+                        statement=statement,
+                        effect=effect,
+                    ),
+                    actor=SYSTEM,
                 )
     return result

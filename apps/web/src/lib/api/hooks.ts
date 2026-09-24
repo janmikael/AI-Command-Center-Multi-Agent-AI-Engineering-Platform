@@ -17,6 +17,8 @@ type TaskStatus = components["schemas"]["TaskStatus"];
 type TaskOut = components["schemas"]["TaskOut"];
 type TaskDetailOut = components["schemas"]["TaskDetailOut"];
 type AgentOut = components["schemas"]["AgentOut"];
+type RuleCategory = components["schemas"]["RuleCategory"];
+type GovernanceRuleOut = components["schemas"]["GovernanceRuleOut"];
 
 // ─── Reads ──────────────────────────────────────────────────────────────
 export function useOverview() {
@@ -113,6 +115,25 @@ export function useEventsFeed(filters: EventFilters) {
   });
 }
 
+export interface GovernanceRuleFilters {
+  category?: RuleCategory;
+  enabled?: boolean;
+}
+
+export function useGovernanceRules(filters: GovernanceRuleFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.governance.rules(filters),
+    queryFn: async () =>
+      (
+        unwrap(
+          await api.GET("/api/v1/governance-rules", {
+            params: { query: { category: filters.category, enabled: filters.enabled } },
+          })
+        )
+      ).items,
+  });
+}
+
 // ─── Writes ─────────────────────────────────────────────────────────────
 /** Every mutation invalidates broadly on success. The live WebSocket event (for every
  * other open tab/session) arrives moments later and invalidates the same way — this
@@ -124,6 +145,7 @@ function useInvalidateEverything() {
     void qc.invalidateQueries({ queryKey: queryKeys.tasks.all });
     void qc.invalidateQueries({ queryKey: queryKeys.agents.all });
     void qc.invalidateQueries({ queryKey: queryKeys.events.all });
+    void qc.invalidateQueries({ queryKey: queryKeys.governance.all });
   };
 }
 
@@ -200,4 +222,48 @@ export function useAssignTask() {
   });
 }
 
-export type { AgentOut, TaskDetailOut, TaskOut };
+type CreateRuleBody = components["schemas"]["GovernanceRuleCreateIn"];
+
+export function useCreateRule() {
+  const invalidate = useInvalidateEverything();
+  return useMutation({
+    mutationFn: async (body: CreateRuleBody) =>
+      unwrap(await api.POST("/api/v1/governance-rules", { body })),
+    onSuccess: invalidate,
+  });
+}
+
+type PatchRuleBody = components["schemas"]["GovernanceRulePatchIn"];
+
+export function useUpdateRule() {
+  const invalidate = useInvalidateEverything();
+  return useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: PatchRuleBody }) =>
+      unwrap(
+        await api.PATCH("/api/v1/governance-rules/{rule_id}", {
+          params: { path: { rule_id: id } },
+          body,
+        })
+      ),
+    onSuccess: invalidate,
+  });
+}
+
+export function useSetRuleEnabled() {
+  const invalidate = useInvalidateEverything();
+  return useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) =>
+      unwrap(
+        enabled
+          ? await api.POST("/api/v1/governance-rules/{rule_id}/enable", {
+              params: { path: { rule_id: id } },
+            })
+          : await api.POST("/api/v1/governance-rules/{rule_id}/disable", {
+              params: { path: { rule_id: id } },
+            })
+      ),
+    onSuccess: invalidate,
+  });
+}
+
+export type { AgentOut, GovernanceRuleOut, RuleCategory, TaskDetailOut, TaskOut };

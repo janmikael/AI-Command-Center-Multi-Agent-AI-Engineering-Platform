@@ -1,6 +1,13 @@
 "use client";
 
-import { Activity, Bot, KanbanSquare, LayoutDashboard, type LucideIcon } from "lucide-react";
+import {
+  Activity,
+  Bot,
+  KanbanSquare,
+  LayoutDashboard,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,6 +18,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/tasks", label: "Tasks", icon: KanbanSquare },
   { href: "/activity", label: "Activity", icon: Activity },
+  { href: "/governance", label: "Governance", icon: ShieldCheck },
 ];
 
 export function isActive(pathname: string, href: string): boolean {

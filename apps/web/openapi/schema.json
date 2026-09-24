@@ -202,6 +202,167 @@
         "title": "CheckOut",
         "type": "object"
       },
+      "ContextEntryCreateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "default": "",
+            "maxLength": 20000,
+            "title": "Body",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ContextEntryKind"
+          },
+          "priority": {
+            "default": 100,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title"
+        ],
+        "title": "ContextEntryCreateIn",
+        "type": "object"
+      },
+      "ContextEntryKind": {
+        "enum": [
+          "architecture",
+          "convention",
+          "integration",
+          "gotcha",
+          "glossary"
+        ],
+        "title": "ContextEntryKind",
+        "type": "string"
+      },
+      "ContextEntryList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ContextEntryOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ContextEntryList",
+        "type": "object"
+      },
+      "ContextEntryOut": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ContextEntryKind"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "body",
+          "priority",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ContextEntryOut",
+        "type": "object"
+      },
+      "ContextEntryPatchIn": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextEntryKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ContextEntryPatchIn",
+        "type": "object"
+      },
       "CriterionIn": {
         "additionalProperties": false,
         "properties": {
@@ -385,6 +546,160 @@
           "next_cursor"
         ],
         "title": "EventPage",
+        "type": "object"
+      },
+      "GovernanceRuleCreateIn": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/RuleCategory"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/RuleEffect"
+          },
+          "statement": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Statement",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "title",
+          "statement",
+          "effect"
+        ],
+        "title": "GovernanceRuleCreateIn",
+        "type": "object"
+      },
+      "GovernanceRuleList": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GovernanceRuleOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "GovernanceRuleList",
+        "type": "object"
+      },
+      "GovernanceRuleOut": {
+        "properties": {
+          "applies_to": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Applies To",
+            "type": "array"
+          },
+          "category": {
+            "$ref": "#/components/schemas/RuleCategory"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/RuleEffect"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "title",
+          "statement",
+          "effect",
+          "applies_to",
+          "priority",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "GovernanceRuleOut",
+        "type": "object"
+      },
+      "GovernanceRulePatchIn": {
+        "additionalProperties": false,
+        "description": "title / statement / effect only \u2014 category is fixed at creation, and\nmatch / applies_to / priority stay API-only for this phase (see PLAN-PHASE-1.5.md).",
+        "properties": {
+          "effect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleEffect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "statement": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "GovernanceRulePatchIn",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -718,6 +1033,26 @@
           "admin"
         ],
         "title": "Role",
+        "type": "string"
+      },
+      "RuleCategory": {
+        "enum": [
+          "security",
+          "tools",
+          "code",
+          "infrastructure"
+        ],
+        "title": "RuleCategory",
+        "type": "string"
+      },
+      "RuleEffect": {
+        "enum": [
+          "allow",
+          "require_approval",
+          "deny",
+          "advisory"
+        ],
+        "title": "RuleEffect",
         "type": "string"
       },
       "StatusChangeOut": {
@@ -1564,6 +1899,290 @@
         ]
       }
     },
+    "/api/v1/governance-rules": {
+      "get": {
+        "operationId": "list_rules_api_v1_governance_rules_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/RuleCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "enabled",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Enabled"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceRuleList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Rules",
+        "tags": [
+          "governance"
+        ]
+      },
+      "post": {
+        "operationId": "create_rule_api_v1_governance_rules_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GovernanceRuleCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Rule",
+        "tags": [
+          "governance"
+        ]
+      }
+    },
+    "/api/v1/governance-rules/{rule_id}": {
+      "get": {
+        "operationId": "get_rule_api_v1_governance_rules__rule_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Rule",
+        "tags": [
+          "governance"
+        ]
+      },
+      "patch": {
+        "operationId": "update_rule_api_v1_governance_rules__rule_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GovernanceRulePatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Rule",
+        "tags": [
+          "governance"
+        ]
+      }
+    },
+    "/api/v1/governance-rules/{rule_id}/disable": {
+      "post": {
+        "operationId": "disable_rule_api_v1_governance_rules__rule_id__disable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disable Rule",
+        "tags": [
+          "governance"
+        ]
+      }
+    },
+    "/api/v1/governance-rules/{rule_id}/enable": {
+      "post": {
+        "operationId": "enable_rule_api_v1_governance_rules__rule_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceRuleOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Rule",
+        "tags": [
+          "governance"
+        ]
+      }
+    },
     "/api/v1/overview": {
       "get": {
         "description": "Everything the Overview page needs, in one round trip.",
@@ -1683,6 +2302,203 @@
           }
         },
         "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{slug}/context": {
+      "get": {
+        "operationId": "list_context_entries_api_v1_projects__slug__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextEntryList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Context Entries",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "operationId": "create_context_entry_api_v1_projects__slug__context_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextEntryCreateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextEntryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Context Entry",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{slug}/context/{entry_id}": {
+      "delete": {
+        "operationId": "delete_context_entry_api_v1_projects__slug__context__entry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Context Entry",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "operationId": "update_context_entry_api_v1_projects__slug__context__entry_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContextEntryPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContextEntryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Context Entry",
         "tags": [
           "projects"
         ]

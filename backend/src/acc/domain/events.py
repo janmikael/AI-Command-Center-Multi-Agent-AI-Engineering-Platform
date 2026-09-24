@@ -39,6 +39,13 @@ class EventType(StrEnum):
     TASK_ASSIGNED = "task.assigned"
     AGENT_MESSAGE = "agent.message"
     AGENT_DECISION = "agent.decision"
+    GOVERNANCE_RULE_CREATED = "governance_rule.created"
+    GOVERNANCE_RULE_UPDATED = "governance_rule.updated"
+    GOVERNANCE_RULE_ENABLED = "governance_rule.enabled"
+    GOVERNANCE_RULE_DISABLED = "governance_rule.disabled"
+    PROJECT_CONTEXT_ENTRY_CREATED = "project_context_entry.created"
+    PROJECT_CONTEXT_ENTRY_UPDATED = "project_context_entry.updated"
+    PROJECT_CONTEXT_ENTRY_DELETED = "project_context_entry.deleted"
 
 
 # Events that count as an agent's *own* activity for derived status. Things done *to* an
@@ -116,6 +123,48 @@ class AgentDecision(Payload):
     alternatives: list[str] = Field(default_factory=list, max_length=10)
 
 
+# governance_rules has no dedicated `events` column (unlike task_id/agent_id), since it
+# is a low-volume admin resource with no per-rule activity view yet — so the id travels
+# in the payload instead, same principle, lighter footprint.
+class GovernanceRuleCreated(Payload):
+    id: uuid.UUID
+    category: str
+    title: str
+    statement: str
+    effect: str
+
+
+class GovernanceRuleUpdated(Payload):
+    id: uuid.UUID
+    changes: dict[str, FieldChange] = Field(min_length=1)
+
+
+class GovernanceRuleEnabled(Payload):
+    id: uuid.UUID
+    title: str
+
+
+class GovernanceRuleDisabled(Payload):
+    id: uuid.UUID
+    title: str
+
+
+class ProjectContextEntryCreated(Payload):
+    id: uuid.UUID
+    kind: str
+    title: str
+
+
+class ProjectContextEntryUpdated(Payload):
+    id: uuid.UUID
+    changes: dict[str, FieldChange] = Field(min_length=1)
+
+
+class ProjectContextEntryDeleted(Payload):
+    id: uuid.UUID
+    title: str
+
+
 PAYLOAD_SCHEMAS: dict[EventType, type[Payload]] = {
     EventType.PROJECT_CREATED: ProjectCreated,
     EventType.REPOSITORY_ADDED: RepositoryAdded,
@@ -126,6 +175,13 @@ PAYLOAD_SCHEMAS: dict[EventType, type[Payload]] = {
     EventType.TASK_ASSIGNED: TaskAssigned,
     EventType.AGENT_MESSAGE: AgentMessage,
     EventType.AGENT_DECISION: AgentDecision,
+    EventType.GOVERNANCE_RULE_CREATED: GovernanceRuleCreated,
+    EventType.GOVERNANCE_RULE_UPDATED: GovernanceRuleUpdated,
+    EventType.GOVERNANCE_RULE_ENABLED: GovernanceRuleEnabled,
+    EventType.GOVERNANCE_RULE_DISABLED: GovernanceRuleDisabled,
+    EventType.PROJECT_CONTEXT_ENTRY_CREATED: ProjectContextEntryCreated,
+    EventType.PROJECT_CONTEXT_ENTRY_UPDATED: ProjectContextEntryUpdated,
+    EventType.PROJECT_CONTEXT_ENTRY_DELETED: ProjectContextEntryDeleted,
 }
 
 

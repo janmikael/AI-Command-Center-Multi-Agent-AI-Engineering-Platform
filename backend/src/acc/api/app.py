@@ -10,7 +10,7 @@ from acc import __version__
 from acc.api.deps import require_same_origin
 from acc.api.errors import register_error_handlers
 from acc.api.middleware import RequestContextMiddleware
-from acc.api.routers import agents, auth, events, health, overview, projects, tasks, ws
+from acc.api.routers import agents, auth, events, governance, health, overview, projects, tasks, ws
 from acc.commands.maintenance import ensure_event_partitions
 from acc.config import Settings, get_settings
 from acc.db.migrations import alembic_head
@@ -89,7 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # handshake has to be accepted before a rejection reason can be sent to the client.
     app.include_router(ws.router)
     v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(require_same_origin)])
-    for module in (auth, overview, agents, projects, tasks, events):
+    for module in (auth, overview, agents, projects, tasks, events, governance):
         v1.include_router(module.router)
     app.include_router(v1)
     return app

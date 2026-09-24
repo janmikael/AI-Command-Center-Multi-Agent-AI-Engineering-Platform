@@ -2,6 +2,7 @@ import { queryKeys } from "@/lib/api/queryKeys";
 
 /** The subset of the wire event shape this module actually needs. */
 export interface InvalidationEvent {
+  type?: string;
   task_key?: string | null;
   agent_slug?: string | null;
 }
@@ -13,17 +14,28 @@ export interface InvalidationEvent {
  * costs nothing extra in practice and stays trivially correct as new pages are added.
  *
  * Mirrors acc.realtime.hub.topics_for on the backend, which computes the same three
- * cases (activity / task / agent) from the same event fields.
+ * cases (activity / task / agent) from the same event fields. Governance and project
+ * context events carry neither task_key nor agent_slug, so they're matched on `type`
+ * instead — the governance UI has no per-project scoping this phase, so both event
+ * families invalidate the same broad `governance.all` prefix.
  */
 export function queryKeysToInvalidate(event: InvalidationEvent): readonly (readonly unknown[])[] {
   // "activity" always matches server-side, so the feed and the aggregate always refresh.
   const keys: (readonly unknown[])[] = [queryKeys.overview, queryKeys.events.all];
   if (event.task_key) keys.push(queryKeys.tasks.all);
   if (event.agent_slug) keys.push(queryKeys.agents.all);
+  if (event.type?.startsWith("governance_rule.") || event.type?.startsWith("project_context_entry."))
+    keys.push(queryKeys.governance.all);
   return keys;
 }
 
 /** Used for {"type":"resync"}: we don't know what changed, so refresh everything. */
 export function allQueryKeys(): readonly (readonly unknown[])[] {
-  return [queryKeys.overview, queryKeys.events.all, queryKeys.tasks.all, queryKeys.agents.all];
+  return [
+    queryKeys.overview,
+    queryKeys.events.all,
+    queryKeys.tasks.all,
+    queryKeys.agents.all,
+    queryKeys.governance.all,
+  ];
 }

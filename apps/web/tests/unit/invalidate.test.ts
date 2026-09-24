@@ -33,14 +33,34 @@ describe("queryKeysToInvalidate", () => {
     expect(keys).not.toContainEqual(queryKeys.tasks.all);
     expect(keys).not.toContainEqual(queryKeys.agents.all);
   });
+
+  it("invalidates governance for governance_rule.* events, which carry neither task_key nor agent_slug", () => {
+    const keys = queryKeysToInvalidate({ type: "governance_rule.created" });
+    expect(keys).toContainEqual(queryKeys.governance.all);
+    expect(keys).not.toContainEqual(queryKeys.tasks.all);
+    expect(keys).not.toContainEqual(queryKeys.agents.all);
+  });
+
+  it("invalidates governance for project_context_entry.* events too", () => {
+    expect(queryKeysToInvalidate({ type: "project_context_entry.deleted" })).toContainEqual(
+      queryKeys.governance.all
+    );
+  });
+
+  it("does not invalidate governance for unrelated event types", () => {
+    expect(queryKeysToInvalidate({ type: "task.created" })).not.toContainEqual(
+      queryKeys.governance.all
+    );
+  });
 });
 
 describe("allQueryKeys", () => {
-  it("covers overview, events, tasks and agents for a resync", () => {
+  it("covers overview, events, tasks, agents and governance for a resync", () => {
     const keys = allQueryKeys();
     expect(keys).toContainEqual(queryKeys.overview);
     expect(keys).toContainEqual(queryKeys.events.all);
     expect(keys).toContainEqual(queryKeys.tasks.all);
     expect(keys).toContainEqual(queryKeys.agents.all);
+    expect(keys).toContainEqual(queryKeys.governance.all);
   });
 });

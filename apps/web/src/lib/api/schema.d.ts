@@ -126,6 +126,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/governance-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Rules */
+        get: operations["list_rules_api_v1_governance_rules_get"];
+        put?: never;
+        /** Create Rule */
+        post: operations["create_rule_api_v1_governance_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/governance-rules/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Rule */
+        get: operations["get_rule_api_v1_governance_rules__rule_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Rule */
+        patch: operations["update_rule_api_v1_governance_rules__rule_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/governance-rules/{rule_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disable Rule */
+        post: operations["disable_rule_api_v1_governance_rules__rule_id__disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/governance-rules/{rule_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enable Rule */
+        post: operations["enable_rule_api_v1_governance_rules__rule_id__enable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/overview": {
         parameters: {
             query?: never;
@@ -179,6 +249,42 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{slug}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Context Entries */
+        get: operations["list_context_entries_api_v1_projects__slug__context_get"];
+        put?: never;
+        /** Create Context Entry */
+        post: operations["create_context_entry_api_v1_projects__slug__context_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{slug}/context/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Context Entry */
+        delete: operations["delete_context_entry_api_v1_projects__slug__context__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Context Entry */
+        patch: operations["update_context_entry_api_v1_projects__slug__context__entry_id__patch"];
         trace?: never;
     };
     "/api/v1/projects/{slug}/repositories": {
@@ -394,6 +500,67 @@ export interface components {
             /** Ok */
             ok: boolean;
         };
+        /** ContextEntryCreateIn */
+        ContextEntryCreateIn: {
+            /**
+             * Body
+             * @default
+             */
+            body: string;
+            kind: components["schemas"]["ContextEntryKind"];
+            /**
+             * Priority
+             * @default 100
+             */
+            priority: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ContextEntryKind
+         * @enum {string}
+         */
+        ContextEntryKind: "architecture" | "convention" | "integration" | "gotcha" | "glossary";
+        /** ContextEntryList */
+        ContextEntryList: {
+            /** Items */
+            items: components["schemas"]["ContextEntryOut"][];
+        };
+        /** ContextEntryOut */
+        ContextEntryOut: {
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["ContextEntryKind"];
+            /** Priority */
+            priority: number;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ContextEntryPatchIn */
+        ContextEntryPatchIn: {
+            /** Body */
+            body?: string | null;
+            kind?: components["schemas"]["ContextEntryKind"] | null;
+            /** Priority */
+            priority?: number | null;
+            /** Title */
+            title?: string | null;
+        };
         /** CriterionIn */
         CriterionIn: {
             /**
@@ -459,6 +626,62 @@ export interface components {
              * @description Pass as before_seq to get the next (older) page; null when exhausted
              */
             next_cursor: number | null;
+        };
+        /** GovernanceRuleCreateIn */
+        GovernanceRuleCreateIn: {
+            category: components["schemas"]["RuleCategory"];
+            effect: components["schemas"]["RuleEffect"];
+            /** Statement */
+            statement: string;
+            /** Title */
+            title: string;
+        };
+        /** GovernanceRuleList */
+        GovernanceRuleList: {
+            /** Items */
+            items: components["schemas"]["GovernanceRuleOut"][];
+        };
+        /** GovernanceRuleOut */
+        GovernanceRuleOut: {
+            /** Applies To */
+            applies_to: string[];
+            category: components["schemas"]["RuleCategory"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            effect: components["schemas"]["RuleEffect"];
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Priority */
+            priority: number;
+            /** Statement */
+            statement: string;
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * GovernanceRulePatchIn
+         * @description title / statement / effect only — category is fixed at creation, and
+         *     match / applies_to / priority stay API-only for this phase (see PLAN-PHASE-1.5.md).
+         */
+        GovernanceRulePatchIn: {
+            effect?: components["schemas"]["RuleEffect"] | null;
+            /** Statement */
+            statement?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -588,6 +811,16 @@ export interface components {
          * @enum {string}
          */
         Role: "operator" | "viewer" | "admin";
+        /**
+         * RuleCategory
+         * @enum {string}
+         */
+        RuleCategory: "security" | "tools" | "code" | "infrastructure";
+        /**
+         * RuleEffect
+         * @enum {string}
+         */
+        RuleEffect: "allow" | "require_approval" | "deny" | "advisory";
         /** StatusChangeOut */
         StatusChangeOut: {
             /** Actor */
@@ -944,6 +1177,199 @@ export interface operations {
             };
         };
     };
+    list_rules_api_v1_governance_rules_get: {
+        parameters: {
+            query?: {
+                category?: components["schemas"]["RuleCategory"] | null;
+                enabled?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceRuleList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_rule_api_v1_governance_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernanceRuleCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_rule_api_v1_governance_rules__rule_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_rule_api_v1_governance_rules__rule_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GovernanceRulePatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_rule_api_v1_governance_rules__rule_id__disable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enable_rule_api_v1_governance_rules__rule_id__enable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GovernanceRuleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     overview_api_v1_overview_get: {
         parameters: {
             query?: never;
@@ -1035,6 +1461,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_context_entries_api_v1_projects__slug__context_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextEntryList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_context_entry_api_v1_projects__slug__context_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextEntryCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextEntryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_context_entry_api_v1_projects__slug__context__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_context_entry_api_v1_projects__slug__context__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextEntryPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContextEntryOut"];
                 };
             };
             /** @description Validation Error */

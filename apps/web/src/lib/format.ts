@@ -2,6 +2,8 @@ import type { components } from "@/lib/api/schema";
 
 type TaskStatus = components["schemas"]["TaskStatus"];
 type AgentStatus = components["schemas"]["AgentStatus"];
+type RuleCategory = components["schemas"]["RuleCategory"];
+type RuleEffect = components["schemas"]["RuleEffect"];
 
 // ─── Relative time ──────────────────────────────────────────────────────
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -94,4 +96,26 @@ export const SEVERITY_COLOR: Record<string, string> = {
   info: "text-foreground",
   warn: "text-warning",
   error: "text-destructive",
+};
+
+// ─── Governance ──────────────────────────────────────────────────────────
+export const RULE_CATEGORY_LABEL: Record<RuleCategory, string> = {
+  security: "Security",
+  tools: "Tools",
+  code: "Code",
+  infrastructure: "Infrastructure",
+};
+
+export const RULE_EFFECT_LABEL: Record<RuleEffect, string> = {
+  allow: "Allow",
+  require_approval: "Requires approval",
+  deny: "Deny",
+  advisory: "Advisory",
+};
+
+export const RULE_EFFECT_COLOR: Record<RuleEffect, string> = {
+  allow: "bg-success/15 text-success",
+  require_approval: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  deny: "bg-destructive/15 text-destructive",
+  advisory: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
 };

@@ -3,8 +3,8 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from acc.commands.seed import AGENTS, seed
-from acc.db.models import Agent, AgentCapability, Event, Project
+from acc.commands.seed import AGENTS, GOVERNANCE_RULES, seed
+from acc.db.models import Agent, AgentCapability, Event, GovernanceRule, Project
 from acc.db.session import SessionFactory
 
 pytestmark = pytest.mark.integration
@@ -20,20 +20,44 @@ class TestSeed:
         result = await seed(sf)
         assert result.created_projects == ["acc"]
         assert result.created_agents == ["architect", "developer", "designer"]
+        assert result.created_governance_rules == [r[1] for r in GOVERNANCE_RULES]
         assert await count(sf, Project) == 1
         assert await count(sf, Agent) == 3
         assert await count(sf, AgentCapability) == sum(len(a.capabilities) for a in AGENTS)
+        assert await count(sf, GovernanceRule) == len(GOVERNANCE_RULES)
         async with sf() as session:
             types = (await session.scalars(select(Event.type).order_by(Event.seq))).all()
-        assert types == ["project.created"] + ["agent.registered"] * 3
+        expected = (
+            ["project.created"]
+            + ["agent.registered"] * 3
+            + ["governance_rule.created"] * len(GOVERNANCE_RULES)
+        )
+        assert types == expected
 
     async def test_is_idempotent(self, sf: SessionFactory) -> None:
         await seed(sf)
         again = await seed(sf)
         assert again.created_projects == []
         assert again.created_agents == []
+        assert again.created_governance_rules == []
         assert await count(sf, Agent) == 3
-        assert await count(sf, Event) == 4  # no duplicate events
+        assert await count(sf, GovernanceRule) == len(GOVERNANCE_RULES)
+        assert await count(sf, Event) == 4 + len(GOVERNANCE_RULES)  # no duplicate events
+
+    async def test_never_overwrites_edited_governance_rule(
+        self, sf: SessionFactory, owner_conn: AsyncConnection
+    ) -> None:
+        await seed(sf)
+        await owner_conn.execute(
+            text("UPDATE governance_rules SET enabled = false WHERE title = 'Never expose secrets'")
+        )
+        await seed(sf)
+        async with sf() as session:
+            rule = await session.scalar(
+                select(GovernanceRule).where(GovernanceRule.title == "Never expose secrets")
+            )
+        assert rule is not None
+        assert rule.enabled is False
 
     async def test_never_overwrites_operator_changes(
         self, sf: SessionFactory, owner_conn: AsyncConnection
@@ -104,8 +128,28 @@ class TestConstraints:
                 "VALUES (gen_random_uuid(), 'system', 'x', 'fatal')",
                 "ck_events_severity",
             ),
+            (
+                "INSERT INTO governance_rules (id, category, title, statement, effect) "
+                "VALUES (gen_random_uuid(), 'not-a-category', 'x', 'x', 'deny')",
+                "ck_governance_rules_category",
+            ),
+            (
+                "INSERT INTO governance_rules (id, category, title, statement, effect) "
+                "VALUES (gen_random_uuid(), 'security', 'x', 'x', 'not-an-effect')",
+                "ck_governance_rules_effect",
+            ),
         ],
-        ids=["key_prefix", "agent_slug", "priority", "progress", "title", "status", "severity"],
+        ids=[
+            "key_prefix",
+            "agent_slug",
+            "priority",
+            "progress",
+            "title",
+            "status",
+            "severity",
+            "governance_category",
+            "governance_effect",
+        ],
     )
     async def test_check_constraints(
         self, app_conn: AsyncConnection, project_id: str, sql: str, constraint: str
@@ -135,3 +179,35 @@ class TestConstraints:
         )
         with pytest.raises(DBAPIError, match="foreign key"):
             await app_conn.execute(text("DELETE FROM agents WHERE slug = 'developer'"))
+
+    async def test_governance_rule_titles_are_unique(self, app_conn: AsyncConnection) -> None:
+        sql = text(
+            "INSERT INTO governance_rules (id, category, title, statement, effect) "
+            "VALUES (gen_random_uuid(), 'security', 'Dup', 'x', 'deny')"
+        )
+        await app_conn.execute(sql)
+        with pytest.raises(DBAPIError, match="uq_governance_rules_title"):
+            await app_conn.execute(sql)
+
+    async def test_context_entry_kind_is_checked(
+        self, app_conn: AsyncConnection, project_id: str
+    ) -> None:
+        with pytest.raises(DBAPIError, match="ck_project_context_entries_kind"):
+            await app_conn.execute(
+                text(
+                    "INSERT INTO project_context_entries (id, project_id, kind, title, body) "
+                    "VALUES (gen_random_uuid(), :project, 'not-a-kind', 't', 'b')"
+                ),
+                {"project": project_id},
+            )
+
+    async def test_context_entry_requires_existing_project(
+        self, app_conn: AsyncConnection
+    ) -> None:
+        with pytest.raises(DBAPIError, match="foreign key"):
+            await app_conn.execute(
+                text(
+                    "INSERT INTO project_context_entries (id, project_id, kind, title, body) "
+                    "VALUES (gen_random_uuid(), gen_random_uuid(), 'gotcha', 't', 'b')"
+                )
+            )
