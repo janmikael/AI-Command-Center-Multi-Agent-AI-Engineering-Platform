@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from starlette.testclient import TestClient
 
 from acc.api.app import create_app
 from acc.config import Settings
@@ -185,3 +186,34 @@ async def signed_in(client: httpx.AsyncClient, operator: Credentials) -> httpx.A
     )
     assert response.status_code == 200, response.text
     return client
+
+
+@pytest.fixture
+async def ws_app(settings: Settings) -> FastAPI:
+    """A second, independent FastAPI instance on the same Postgres/Redis as `app`.
+
+    Realtime tests use this to exercise the real multi-process design (ARCHITECTURE.md
+    §1.2/§3.3): a write via `client`/`signed_in` (simulating one API process) publishes to
+    Redis, and *this* process's own Hub — fed by its own relay task — is what delivers it
+    to a WebSocket connected here. Deliberately not the same FastAPI object as `app`, and
+    deliberately depends on `clean_state` only through `settings` (not the `app` fixture),
+    so it doesn't matter which of `app` / `ws_app` a test builds first.
+    """
+    return create_app(settings)
+
+
+@pytest.fixture
+async def ws_client(ws_app: FastAPI) -> AsyncIterator[TestClient]:
+    with TestClient(ws_app, base_url=TEST_ORIGIN) as test_client:
+        yield test_client
+
+
+def login_ws_client(ws_client: TestClient, operator: Credentials) -> None:
+    """Logs `operator` into `ws_client` directly (not via `client`/`signed_in`, which are
+    bound to the other FastAPI instance and so hold their own, separate session cookie)."""
+    response = ws_client.post(
+        "/api/v1/auth/login",
+        json={"email": operator.email, "password": operator.password},
+        headers={"origin": TEST_ORIGIN},
+    )
+    assert response.status_code == 200, response.text

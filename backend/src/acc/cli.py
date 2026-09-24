@@ -85,6 +85,45 @@ def ensure_partitions(
     typer.echo(f"Event partitions: {created} created")
 
 
+@app.command("simulate-activity")
+def simulate_activity(
+    minutes: Annotated[
+        float, typer.Option("--minutes", help="How long to run", min=0.05, max=120)
+    ] = 2.0,
+    interval: Annotated[
+        float, typer.Option("--interval", help="Seconds between ticks", min=0.5)
+    ] = 3.0,
+) -> None:
+    """Emit realistic agent activity for local testing of the live dashboard. Dev only:
+    refuses to run when ACC_ENV=production."""
+    from acc.commands.simulate import SimulatorConfig, run_simulation
+    from acc.kv import create_redis
+    from acc.realtime.publisher import RedisPublisher
+
+    settings = get_settings()
+    if settings.is_production:
+        typer.echo("error: simulate-activity refuses to run when ACC_ENV=production", err=True)
+        raise typer.Exit(1)
+    configure_logging(settings.log_level, json=settings.json_logs)
+
+    async def run() -> None:
+        engine = create_engine(settings.database_url.get_secret_value())
+        redis = create_redis(settings.redis_url.get_secret_value())
+        try:
+            sf = create_session_factory(engine)
+            sink = RedisPublisher(redis)
+            config = SimulatorConfig(
+                ticks=max(1, int(minutes * 60 / interval)), interval_seconds=interval
+            )
+            async for description in run_simulation(sf, sink, config):
+                typer.echo(description)
+        finally:
+            await redis.aclose()
+            await engine.dispose()
+
+    asyncio.run(run())
+
+
 @app.command("openapi")
 def openapi(
     output: Annotated[

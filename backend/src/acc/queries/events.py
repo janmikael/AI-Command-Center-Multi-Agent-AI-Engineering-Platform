@@ -11,7 +11,10 @@ from acc.db.models import Agent, Event, Project, Task, User
 from acc.db.session import SessionFactory
 from acc.domain.events import SIMULATOR, SYSTEM
 
-MAX_PAGE = 200
+MAX_PAGE = 500
+# ^ Bounds two different callers: the REST feed (which additionally caps `limit` at 200
+# via a stricter Query() constraint in the router, well under this) and the WebSocket
+# resume path (acc.api.routers.ws), whose gap-too-large threshold IS this ceiling.
 
 
 @dataclass(frozen=True)

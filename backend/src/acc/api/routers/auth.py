@@ -1,3 +1,5 @@
+import ipaddress
+
 from fastapi import APIRouter, Request, Response
 
 from acc.api.deps import (
@@ -20,6 +22,19 @@ def _clear_cookie(response: Response, settings: Settings) -> None:
     )
 
 
+def _client_ip(request: Request) -> str | None:
+    """The session's `ip` column is informational only (`inet`), so any value that isn't a
+    real address — a test client placeholder, a misbehaving proxy — is stored as null
+    rather than failing the request."""
+    if request.client is None:
+        return None
+    try:
+        ipaddress.ip_address(request.client.host)
+    except ValueError:
+        return None
+    return request.client.host
+
+
 @router.post("/login")
 async def login(
     body: LoginIn,
@@ -35,7 +50,7 @@ async def login(
         settings,
         email=str(body.email),
         password=body.password,
-        ip=request.client.host if request.client else None,
+        ip=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
     response.set_cookie(

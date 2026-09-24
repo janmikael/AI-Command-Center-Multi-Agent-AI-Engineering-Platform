@@ -54,7 +54,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S105", "S106"]  # hard-coded test passwords
+"tests/**" = ["S105", "S106", "S311"]  # hard-coded test passwords; seeded RNG for determinism
 "alembic/versions/**" = ["N999"]
 
 # ─── Mypy ────────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ type = "layers"
 layers = [
     "acc.cli",
     "acc.api",
-    "acc.commands | acc.queries",
+    "acc.commands | acc.queries | acc.realtime",
     "acc.db",
     "acc.domain",
 ]
