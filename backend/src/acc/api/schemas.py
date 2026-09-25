@@ -6,6 +6,7 @@ Input models forbid unknown fields, so an attempt to set `status`, `assigned_age
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, model_validator
@@ -342,6 +343,34 @@ class ContextEntryPatchIn(ApiModel):
             if getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
         return self
+
+
+# ─── Runs ────────────────────────────────────────────────────────────────
+class RunOut(OutModel):
+    id: uuid.UUID
+    task_id: uuid.UUID
+    task_key: str
+    agent_id: uuid.UUID
+    agent_slug: str
+    status: str
+    provider_session_id: str | None
+    container_id: str | None
+    branch_name: str | None
+    current_step: str | None
+    cancel_requested_at: datetime | None
+    queued_at: datetime
+    started_at: datetime | None
+    ended_at: datetime | None
+    last_heartbeat_at: datetime | None
+    result_summary: str | None
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cost_usd: Decimal
+
+
+class RunList(ApiModel):
+    items: list[RunOut]
 
 
 # ─── Overview ────────────────────────────────────────────────────────────

@@ -254,6 +254,30 @@ class TestRequestCancel:
         with pytest.raises(Conflict):
             await run_commands.request_cancel(sf, None, run_id=run.id)
 
+    async def test_enqueues_a_cancel_run_job(self, sf: SessionFactory) -> None:
+        await _make_runnable(sf)
+        key = await _task_to_working(sf)
+        run = await _get_run(sf, key)
+        await run_commands.request_cancel(sf, None, run_id=run.id)
+        async with sf() as s:
+            job = await s.scalar(select(Job).where(Job.kind == "cancel_run"))
+        assert job is not None
+        assert job.payload == {"run_id": str(run.id)}
+        assert job.status == "pending"
+
+    async def test_rejecting_the_request_does_not_enqueue_a_job(
+        self, sf: SessionFactory
+    ) -> None:
+        await _make_runnable(sf)
+        key = await _task_to_working(sf)
+        run = await _get_run(sf, key)
+        await run_commands.fail_run(sf, None, actor="x", run_id=run.id, reason="already done")
+        with pytest.raises(Conflict):
+            await run_commands.request_cancel(sf, None, run_id=run.id)
+        async with sf() as s:
+            job = await s.scalar(select(Job).where(Job.kind == "cancel_run"))
+        assert job is None
+
 
 class TestConstraints:
     async def test_db_rejects_a_second_concurrent_active_run_for_the_same_task(

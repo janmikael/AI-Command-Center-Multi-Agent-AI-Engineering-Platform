@@ -17,6 +17,7 @@ dependencies = [
     "redis>=5.2",
     "uuid-utils>=0.9",
     "typer>=0.13",
+    "aiodocker>=0.24",
 ]
 
 [project.scripts]
@@ -79,6 +80,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: needs Postgres + Redis (docker compose dev services)",
+    "docker: needs docker-socket-proxy + the built runner image (docker compose dev services)",
 ]
 filterwarnings = ["error::DeprecationWarning:acc.*"]
 

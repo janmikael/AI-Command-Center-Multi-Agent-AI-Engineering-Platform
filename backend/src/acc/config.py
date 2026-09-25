@@ -25,6 +25,14 @@ class Settings(BaseSettings):
 
     # HMAC key for hashing session tokens before they are stored.
     session_secret: SecretStr = Field(min_length=32)
+    # Separate from session_secret on purpose (PLAN-PHASE-2-M2.md §2.4): signs the
+    # per-run token a sandboxed runner container uses to call the internal API. A leak
+    # of one secret must not compromise the other.
+    runner_token_secret: SecretStr = Field(min_length=32)
+    run_token_ttl_seconds: int = Field(default=3600, gt=0)
+    runner_image: str = "acc-runner:local"
+    runner_network: str = "acc_runner-egress"
+    docker_proxy_url: str = "tcp://docker-socket-proxy:2375"
     # Exact origin the browser uses (scheme://host[:port]). Used for the CSRF origin
     # check and to decide whether cookies are marked Secure.
     public_origin: str = "http://localhost"
@@ -58,6 +66,7 @@ class Settings(BaseSettings):
         problems: list[str] = []
         secrets = {
             "ACC_SESSION_SECRET": self.session_secret,
+            "ACC_RUNNER_TOKEN_SECRET": self.runner_token_secret,
             "ACC_DATABASE_URL": self.database_url,
             "ACC_REDIS_URL": self.redis_url,
         }

@@ -7,6 +7,12 @@ services:
   redis:
     ports: ["127.0.0.1:${ACC_REDIS_PORT:-6379}:6379"]
 
+  # For the backend test suite's launcher tests, which create real containers through it
+  # (PLAN-PHASE-2-M2.md §5) — the same restricted proxy the orchestrator uses, not a
+  # separate, more permissive one.
+  docker-socket-proxy:
+    ports: ["127.0.0.1:${ACC_DOCKER_PROXY_PORT:-2375}:2375"]
+
   api:
     command: ["uvicorn", "acc.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000",
               "--reload", "--reload-dir", "/app/src",

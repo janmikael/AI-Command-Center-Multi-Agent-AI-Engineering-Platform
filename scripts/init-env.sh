@@ -18,6 +18,7 @@ sed \
   -e "s|^ACC_APP_DB_PASSWORD=.*|ACC_APP_DB_PASSWORD=$(secret 24)|" \
   -e "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$(secret 24)|" \
   -e "s|^ACC_SESSION_SECRET=.*|ACC_SESSION_SECRET=$(secret 32)|" \
+  -e "s|^ACC_RUNNER_TOKEN_SECRET=.*|ACC_RUNNER_TOKEN_SECRET=$(secret 32)|" \
   .env.example > .env
 chmod 600 .env
 echo "Created .env with random secrets."

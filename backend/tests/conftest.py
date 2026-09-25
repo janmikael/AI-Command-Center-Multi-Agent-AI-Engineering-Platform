@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 
+import aiodocker
 import httpx
 import pytest
 from alembic import command
@@ -77,6 +78,7 @@ def settings(test_urls: DbUrls, migrated: Config) -> Settings:
         migrations_database_url=SecretStr(test_urls.owner_db),
         redis_url=SecretStr(test_urls.redis),
         session_secret=SecretStr("test-secret-" + "x" * 32),
+        runner_token_secret=SecretStr("test-runner-secret-" + "x" * 32),
         public_origin=TEST_ORIGIN,
         alembic_ini=str(BACKEND_DIR / "alembic.ini"),
         log_level="WARNING",
@@ -136,6 +138,26 @@ async def app_conn(settings: Settings) -> AsyncIterator[AsyncConnection]:
     async with engine.connect() as conn:
         yield conn
     await engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def docker_proxy_url() -> str:
+    url = os.environ.get("ACC_TEST_DOCKER_PROXY_URL")
+    if not url:
+        message = "ACC_TEST_DOCKER_PROXY_URL not set; run scripts/test-backend.sh"
+        if os.environ.get("ACC_REQUIRE_INTEGRATION") == "1":
+            pytest.fail(message)
+        pytest.skip(message)
+    return url
+
+
+@pytest.fixture
+async def docker_client(docker_proxy_url: str) -> AsyncIterator[aiodocker.Docker]:
+    """An aiodocker.Docker pointed at the same restricted docker-socket-proxy the
+    orchestrator uses — never the raw socket, even in tests (PLAN-PHASE-2-M2.md §5)."""
+    docker = aiodocker.Docker(url=docker_proxy_url)
+    yield docker
+    await docker.close()
 
 
 @pytest.fixture

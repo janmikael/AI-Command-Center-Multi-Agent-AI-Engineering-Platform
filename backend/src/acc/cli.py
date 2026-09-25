@@ -143,6 +143,7 @@ def openapi(
         database_url=SecretStr("postgresql+asyncpg://unused@localhost/unused"),
         redis_url=SecretStr("redis://localhost"),
         session_secret=SecretStr("x" * 32),
+        runner_token_secret=SecretStr("x" * 32),
         log_level="WARNING",
     )
     schema = json.dumps(create_app(placeholder).openapi(), indent=2, sort_keys=True) + "\n"

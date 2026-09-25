@@ -19,8 +19,20 @@ services:
     deploy:
       resources:
         limits: { memory: 256M }
+  orchestrator:
+    deploy:
+      resources:
+        limits: { memory: 256M }
+  docker-socket-proxy:
+    deploy:
+      resources:
+        limits: { memory: 128M }
 
 networks:
   # Data services and app containers get no route to the internet.
   internal:
     internal: true
+  # Deliberately NOT internal:true — runner containers need real internet access from
+  # M3 onward (the Anthropic API, git remotes, package registries). It has no route to
+  # `internal` regardless (a separate network, not a wider one), so this doesn't weaken
+  # the postgres/redis isolation above.

@@ -17,6 +17,9 @@ x-api-env: &api-env
   ACC_MIGRATIONS_DATABASE_URL: postgresql+asyncpg://acc_owner:${ACC_OWNER_DB_PASSWORD:?run scripts/init-env.sh}@postgres:5432/acc
   ACC_REDIS_URL: redis://:${REDIS_PASSWORD:?run scripts/init-env.sh}@redis:6379/0
   ACC_SESSION_SECRET: ${ACC_SESSION_SECRET:?run scripts/init-env.sh}
+  # Signs/verifies per-run tokens (PLAN-PHASE-2-M2.md §2.4). api verifies them on
+  # /internal/*; orchestrator mints them at launch. Both need the same secret.
+  ACC_RUNNER_TOKEN_SECRET: ${ACC_RUNNER_TOKEN_SECRET:?run scripts/init-env.sh}
   ACC_PUBLIC_ORIGIN: ${ACC_PUBLIC_ORIGIN:-http://localhost}
   ACC_LOG_LEVEL: ${ACC_LOG_LEVEL:-INFO}
 
@@ -90,13 +93,75 @@ services:
       timeout: 3s
       start_period: 15s
       retries: 3
-    networks: [internal]
+    # runner-egress: so runner containers can reach /internal/* (PLAN-PHASE-2-M2.md §1).
+    # api is the only service on both networks; runner containers join runner-egress only.
+    networks: [internal, runner-egress]
     restart: unless-stopped
     read_only: true
     tmpfs: [/tmp]
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
     logging: *logging
+
+  # The only container with access to the real Docker socket (read-only), and even then
+  # scoped to container lifecycle verbs only — see PLAN-PHASE-2-M2.md §2.1.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    environment:
+      CONTAINERS: 1
+      POST: 1
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      EXEC: 0
+      BUILD: 0
+      COMMIT: 0
+      SWARM: 0
+      SERVICES: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [internal]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  # Claims jobs (acc.orchestrator.scheduler, M1) and launches/stops runner containers
+  # (acc.orchestrator.launcher, M2) via docker-socket-proxy. Never joins runner-egress
+  # itself — only the containers it launches do.
+  orchestrator:
+    build: ./backend
+    image: acc-api:local
+    command: ["python", "-m", "acc.orchestrator.main"]
+    environment:
+      <<: *api-env
+      ACC_RUNNER_IMAGE: acc-runner:local
+      ACC_RUNNER_NETWORK: acc_runner-egress
+      ACC_DOCKER_PROXY_URL: tcp://docker-socket-proxy:2375
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
+    # This process serves no HTTP endpoint, unlike api (same image) — the image's own
+    # Dockerfile HEALTHCHECK assumes one and would otherwise report unhealthy forever.
+    healthcheck:
+      disable: true
+    networks: [internal]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
+  # Never started by `up` — built on demand (`docker compose build runner`) and launched
+  # per-run, dynamically, by the orchestrator. One container per run, ephemeral.
+  runner:
+    build: ./runner
+    image: acc-runner:local
+    profiles: ["build-only"]
 
   web:
     build: ./apps/web
@@ -147,6 +212,9 @@ networks:
   edge: {}
   # compose.prod.yml makes this network internal-only (no route to the internet).
   internal: {}
+  # Runner containers join this and nothing else — no route to postgres/redis, ever
+  # (PLAN-PHASE-2-M2.md §1). api also joins it, so runners can reach /internal/*.
+  runner-egress: {}
 
 volumes:
   pgdata:

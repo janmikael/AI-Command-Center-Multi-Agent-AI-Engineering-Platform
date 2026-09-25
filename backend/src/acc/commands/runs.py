@@ -313,10 +313,12 @@ async def mark_timed_out(
 async def request_cancel(
     sf: SessionFactory, sink: EventSink | None, *, run_id: uuid.UUID
 ) -> None:
-    """The operator-facing half of cancellation: records the request. It does not change
-    run.status itself — the orchestrator (or, for a still-QUEUED run, mark_cancelled
-    directly) is what confirms the container is actually gone and moves the run to
-    CANCELLED, avoiding a race with a run that's about to succeed on its own."""
+    """The operator-facing half of cancellation: records the request and enqueues a
+    cancel_run job in the same transaction (ADR-2, same durable-queue discipline as
+    enqueue_start_run_in_uow). It does not change run.status itself — the orchestrator's
+    launcher (acc.orchestrator.launcher.handle_cancel_run, M2) is what confirms the
+    container is actually gone and moves the run to CANCELLED, avoiding a race with a
+    run that's about to succeed on its own."""
     async with unit_of_work(sf, sink) as uow:
         run = await _lock_run(uow.session, run_id)
         if RunStatus(run.status) not in ACTIVE:
@@ -324,6 +326,7 @@ async def request_cancel(
                 f"Run {run_id} is {run.status}; it can't be cancelled", run_id=str(run_id)
             )
         run.cancel_requested_at = utcnow()
+        uow.session.add(Job(kind="cancel_run", payload={"run_id": str(run.id)}))
 
 
 # record_tool_call / record_usage (writing tool_calls / usage_records) are added in M3

@@ -92,3 +92,30 @@ async def list_runs(
     async with sf() as s:
         rows = (await s.execute(stmt)).all()
     return [_view(*row) for row in rows]
+
+
+TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "timed_out")
+
+
+async def list_recently_finished_with_container(
+    sf: SessionFactory, *, ended_after: datetime, limit: int = 200
+) -> list[RunView]:
+    """Terminal runs that still have a container to clean up (PLAN-PHASE-2-M2.md §3.5).
+    Bounded by `ended_after` rather than scanning all history — cleanup is idempotent
+    (deleting an already-gone container just 404s), so a run that ages out of this
+    window without ever being successfully cleaned up stays that way; acceptable for M2,
+    revisit if it proves not to be."""
+    stmt = (
+        _base_query()
+        .where(
+            AgentRun.status.in_(TERMINAL_STATUSES),
+            AgentRun.container_id.isnot(None),
+            AgentRun.ended_at.isnot(None),
+            AgentRun.ended_at > ended_after,
+        )
+        .order_by(AgentRun.ended_at.desc())
+        .limit(max(1, min(limit, 200)))
+    )
+    async with sf() as s:
+        rows = (await s.execute(stmt)).all()
+    return [_view(*row) for row in rows]

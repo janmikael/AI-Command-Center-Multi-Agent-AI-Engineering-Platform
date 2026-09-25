@@ -10,6 +10,7 @@ def make(**overrides: object) -> Settings:
         "database_url": SecretStr("postgresql+asyncpg://u:strong-pw@db/acc"),
         "redis_url": SecretStr("redis://:strong-pw@redis:6379/0"),
         "session_secret": SecretStr("a" * 16 + "b" * 16 + "c" * 8),
+        "runner_token_secret": SecretStr("d" * 16 + "e" * 16 + "f" * 8),
         "public_origin": "https://acc.example.com",
     }
     values.update(overrides)
@@ -31,6 +32,14 @@ def test_production_defaults_to_json_logs_and_secure_cookies() -> None:
 def test_production_rejects_placeholder_secret() -> None:
     with pytest.raises(ValidationError, match="ACC_SESSION_SECRET"):
         make(env="production", session_secret=SecretStr("change-me-to-at-least-32-random-chars"))
+
+
+def test_production_rejects_placeholder_runner_token_secret() -> None:
+    with pytest.raises(ValidationError, match="ACC_RUNNER_TOKEN_SECRET"):
+        make(
+            env="production",
+            runner_token_secret=SecretStr("change-me-to-at-least-32-random-chars"),
+        )
 
 
 def test_production_rejects_http_origin() -> None:
