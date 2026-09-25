@@ -9,7 +9,13 @@ from fastapi import APIRouter
 
 from acc.api.deps import EventSinkDep, SessionFactoryDep
 from acc.api.internal.deps import RunClaimsDep
-from acc.api.internal.schemas import CompleteIn, FailIn, HeartbeatIn, HeartbeatOut
+from acc.api.internal.schemas import (
+    CompleteIn,
+    FailIn,
+    FileChangesIn,
+    HeartbeatIn,
+    HeartbeatOut,
+)
 from acc.commands import runs as run_commands
 from acc.db.session import SessionFactory
 from acc.domain.errors import NotFound
@@ -54,3 +60,12 @@ async def fail(
 ) -> None:
     actor = await _actor_for(sf, claims.run_id)
     await run_commands.fail_run(sf, sink, actor=actor, run_id=claims.run_id, reason=body.reason)
+
+
+@router.post("/file-changes", status_code=204)
+async def file_changes(
+    claims: RunClaimsDep, body: FileChangesIn, sf: SessionFactoryDep, sink: EventSinkDep
+) -> None:
+    await run_commands.record_file_changes(
+        sf, sink, run_id=claims.run_id, changes=[c.model_dump() for c in body.changes]
+    )

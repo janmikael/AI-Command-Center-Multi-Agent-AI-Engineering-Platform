@@ -160,6 +160,20 @@ async def docker_client(docker_proxy_url: str) -> AsyncIterator[aiodocker.Docker
     await docker.close()
 
 
+@pytest.fixture(scope="session")
+def git_test_remote_url() -> str:
+    """Only resolvable from inside runner-egress (i.e. from a launched runner
+    container) — this fixture just hands the URL through as GIT_REMOTE_URL; the test
+    process itself never connects to it directly (PLAN-PHASE-2-M3.md §7)."""
+    url = os.environ.get("ACC_TEST_GIT_REMOTE_URL")
+    if not url:
+        message = "ACC_TEST_GIT_REMOTE_URL not set; run scripts/test-backend.sh"
+        if os.environ.get("ACC_REQUIRE_INTEGRATION") == "1":
+            pytest.fail(message)
+        pytest.skip(message)
+    return url
+
+
 @pytest.fixture
 async def app(settings: Settings, clean_state: None) -> AsyncIterator[FastAPI]:
     application = create_app(settings)

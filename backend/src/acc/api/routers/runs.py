@@ -10,7 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 
 from acc.api.deps import EventSinkDep, OperatorDep, SessionFactoryDep
-from acc.api.schemas import RunList, RunOut
+from acc.api.schemas import FileChangeList, FileChangeOut, RunList, RunOut
 from acc.commands import runs as run_commands
 from acc.db.session import SessionFactory
 from acc.domain.errors import NotFound
@@ -49,3 +49,12 @@ async def cancel_run(
 ) -> RunOut:
     await run_commands.request_cancel(sf, sink, run_id=run_id)
     return await _run(sf, run_id)
+
+
+@router.get("/{run_id}/file-changes")
+async def list_file_changes(
+    run_id: uuid.UUID, _: OperatorDep, sf: SessionFactoryDep
+) -> FileChangeList:
+    await _run(sf, run_id)  # 404 on an unknown run, same as every other nested read
+    changes = await run_queries.list_file_changes(sf, run_id)
+    return FileChangeList(items=[FileChangeOut.model_validate(c) for c in changes])

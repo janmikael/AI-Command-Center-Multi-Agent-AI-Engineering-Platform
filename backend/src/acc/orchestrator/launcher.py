@@ -36,6 +36,7 @@ from acc.domain.events import ORCHESTRATOR
 from acc.ids import utcnow
 from acc.orchestrator.scheduler import ClaimedJob
 from acc.queries import runs as run_queries
+from acc.queries.runs import RunRepository
 from acc.security import mint_run_token
 
 log = structlog.get_logger("acc.orchestrator.launcher")
@@ -45,22 +46,59 @@ CONTAINER_NOT_FOUND = 404
 # Tags every runner container so a future `docker ps --filter label=...` can find them
 # independently of our own bookkeeping — a debugging/ops aid, not load-bearing.
 RUN_ID_LABEL = "acc.run_id"
+WORKSPACE_DIR = "/workspace/repo"
+
+
+def compute_branch_name(task_key: str, run_id: uuid.UUID) -> str:
+    """Deterministic, computed here — not something the runner invents or reports back
+    (PLAN-PHASE-2-M3.md §3). The short run-id suffix keeps a retried task's branches from
+    colliding without needing an attempt counter — taken from the *end* of the UUID7,
+    not the start: run_id's leading bits are a millisecond timestamp (RFC 9562), so two
+    runs created moments apart share almost all of their leading hex digits and would
+    collide constantly; the trailing bits are the random part (caught live: every run in
+    one fast test session computing the same branch name, PLAN-PHASE-2-M3.md's own test
+    run)."""
+    return f"acc/{task_key.lower()}-{run_id.hex[-8:]}"
 
 
 def build_container_config(
-    *, run_token: str, run_id: uuid.UUID, agent_id: uuid.UUID, settings: Settings
+    *,
+    run_token: str,
+    run_id: uuid.UUID,
+    agent_id: uuid.UUID,
+    settings: Settings,
+    repository: RunRepository | None = None,
+    branch_name: str | None = None,
 ) -> dict[str, Any]:
     """Pure: the exact request body sent to docker-socket-proxy's /containers/create.
-    No I/O, no Docker client — testable on its own (tests/unit/test_launcher.py)."""
+    No I/O, no Docker client — testable on its own (tests/unit/test_launcher.py).
+
+    repository/branch_name (M3): both None for a task with no linked repository — the
+    runner's git step is entirely conditional on GIT_REMOTE_URL being present, so a
+    plain task's container config is byte-for-byte what M2 already produced.
+    """
+    env = [
+        f"RUN_ID={run_id}",
+        f"AGENT_ID={agent_id}",
+        f"RUN_TOKEN={run_token}",
+        "API_BASE_URL=http://api:8000",
+        "HEARTBEAT_INTERVAL_S=5",
+    ]
+    if repository is not None:
+        assert branch_name is not None, "branch_name is required whenever repository is set"
+        env += [
+            f"GIT_REMOTE_URL={repository.remote_url}",
+            f"GIT_DEFAULT_BRANCH={repository.default_branch}",
+            f"GIT_BRANCH_NAME={branch_name}",
+            f"WORKSPACE_DIR={WORKSPACE_DIR}",
+        ]
+        # Absent entirely for a task with no repository — nothing for GIT_ASKPASS to
+        # read, and nothing to redact if it were ever logged (PLAN-PHASE-2-M3.md §2.3).
+        if settings.git_credential is not None:
+            env.append(f"GIT_CREDENTIAL={settings.git_credential.get_secret_value()}")
     return {
         "Image": settings.runner_image,
-        "Env": [
-            f"RUN_ID={run_id}",
-            f"AGENT_ID={agent_id}",
-            f"RUN_TOKEN={run_token}",
-            "API_BASE_URL=http://api:8000",
-            "HEARTBEAT_INTERVAL_S=5",
-        ],
+        "Env": env,
         "Labels": {RUN_ID_LABEL: str(run_id)},
         "HostConfig": {
             # Never the internal network: a runner container must have no path to
@@ -70,8 +108,12 @@ def build_container_config(
             "NanoCpus": 500_000_000,  # 0.5 vCPU
             "PidsLimit": 64,
             "ReadonlyRootfs": True,
-            # A container tmpfs mount spec, not this process's own filesystem.
-            "Tmpfs": {"/tmp": "size=64m", "/workspace": "size=256m"},  # noqa: S108
+            # A container tmpfs mount spec, not this process's own filesystem. mode=1777
+            # (world-writable + sticky, same as a normal /tmp) — without it a tmpfs
+            # mount defaults to root-owned 0755, and the non-root runner user can't
+            # create anything under it (caught live: git clone failing with "Permission
+            # denied" creating /workspace/repo, PLAN-PHASE-2-M3.md's own test run).
+            "Tmpfs": {"/tmp": "size=64m,mode=1777", "/workspace": "size=256m,mode=1777"},  # noqa: S108
             "CapDrop": ["ALL"],
             "SecurityOpt": ["no-new-privileges:true"],
             "AutoRemove": False,  # we remove explicitly, after inspecting exit status
@@ -104,6 +146,9 @@ async def handle_start_run(
         )
         return
 
+    repository = await run_queries.get_repository_for_task(sf, run.task_id)
+    branch_name = compute_branch_name(run.task_key, run_id) if repository is not None else None
+
     token = mint_run_token(
         run_id=run_id,
         agent_id=run.agent_id,
@@ -111,7 +156,12 @@ async def handle_start_run(
         secret=settings.runner_token_secret.get_secret_value(),
     )
     config = build_container_config(
-        run_token=token, run_id=run_id, agent_id=run.agent_id, settings=settings
+        run_token=token,
+        run_id=run_id,
+        agent_id=run.agent_id,
+        settings=settings,
+        repository=repository,
+        branch_name=branch_name,
     )
     try:
         container = await docker.containers.create(config, name=f"acc-run-{run_id}")
@@ -124,7 +174,13 @@ async def handle_start_run(
         return
 
     await run_commands.mark_run_starting(
-        sf, sink, actor=ORCHESTRATOR, run_id=run_id, container_id=container.id
+        sf,
+        sink,
+        actor=ORCHESTRATOR,
+        run_id=run_id,
+        container_id=container.id,
+        workspace_ref=WORKSPACE_DIR if repository is not None else None,
+        branch_name=branch_name,
     )
 
 

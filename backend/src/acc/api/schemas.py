@@ -119,6 +119,9 @@ class TaskOut(OutModel):
     project_slug: str
     assignee_slug: str | None
     assignee_name: str | None
+    branch_name: str | None = Field(
+        description="Set once an agent run pushes a branch (Phase 2 M3); null otherwise"
+    )
     created_at: datetime
     updated_at: datetime
     allowed_transitions: list[TaskStatus] = Field(
@@ -355,6 +358,7 @@ class RunOut(OutModel):
     status: str
     provider_session_id: str | None
     container_id: str | None
+    workspace_ref: str | None
     branch_name: str | None
     current_step: str | None
     cancel_requested_at: datetime | None
@@ -371,6 +375,19 @@ class RunOut(OutModel):
 
 class RunList(ApiModel):
     items: list[RunOut]
+
+
+class FileChangeOut(OutModel):
+    id: uuid.UUID
+    path: str
+    change_type: str
+    additions: int | None
+    deletions: int | None
+    created_at: datetime
+
+
+class FileChangeList(ApiModel):
+    items: list[FileChangeOut]
 
 
 # ─── Overview ────────────────────────────────────────────────────────────

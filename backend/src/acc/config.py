@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     runner_image: str = "acc-runner:local"
     runner_network: str = "acc_runner-egress"
     docker_proxy_url: str = "tcp://docker-socket-proxy:2375"
+    # M3 (PLAN-PHASE-2-M3.md §2.2): one credential for one throwaway test repository —
+    # deliberately not a per-repository column in `repositories`, see that section for
+    # why. Optional: a task with no repository never needs it. Injected into the runner
+    # via GIT_CREDENTIAL and consumed only through GIT_ASKPASS (§2.3) — never written to
+    # a git remote URL or config file.
+    git_credential: SecretStr | None = None
     # Exact origin the browser uses (scheme://host[:port]). Used for the CSRF origin
     # check and to decide whether cookies are marked Secure.
     public_origin: str = "http://localhost"
@@ -64,12 +70,14 @@ class Settings(BaseSettings):
         if self.env != "production":
             return self
         problems: list[str] = []
-        secrets = {
+        secrets: dict[str, SecretStr] = {
             "ACC_SESSION_SECRET": self.session_secret,
             "ACC_RUNNER_TOKEN_SECRET": self.runner_token_secret,
             "ACC_DATABASE_URL": self.database_url,
             "ACC_REDIS_URL": self.redis_url,
         }
+        if self.git_credential is not None:
+            secrets["ACC_GIT_CREDENTIAL"] = self.git_credential
         for name, value in secrets.items():
             if any(marker in value.get_secret_value().lower() for marker in _WEAK_MARKERS):
                 problems.append(f"{name} still contains a placeholder value")

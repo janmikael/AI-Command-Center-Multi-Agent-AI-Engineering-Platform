@@ -1,13 +1,13 @@
-"""Agent run lifecycle: the only code that writes agent_runs or enqueues run-related jobs.
+"""Agent run lifecycle: the only code that writes agent_runs/file_changes or enqueues
+run-related jobs.
 
 M1 (Phase 2) scope: the row + job-queue side only. Actually launching a sandboxed
 container is acc.orchestrator.launcher (M2); this module has no knowledge of Docker and
-imports nothing from it. Writing tool_calls/file_changes/usage_records is M3's
-acc.runner-facing internal API, not here — nothing produces that data until the real
-adapter exists, so those commands are added alongside it rather than built ahead of any
-caller. See PLAN-PHASE-2.md §1.5 for why acc.runner never calls into this module
-directly either — it goes through the internal HTTP API instead, so the untrusted
-container never gets a database credential.
+imports nothing from it. M3 adds record_file_changes, called from the git round trip
+(PLAN-PHASE-2-M3.md); tool_calls/usage_records still have no writer — those are M4's
+Claude Agent SDK adapter's concern, not this milestone's. See PLAN-PHASE-2.md §1.5 for
+why acc.runner never calls into this module directly either — it goes through the
+internal HTTP API instead, so the untrusted container never gets a database credential.
 
 Import direction: this module depends on acc.commands._task_mutations, never on
 acc.commands.tasks — acc.commands.tasks depends on this module (for the enqueue side
@@ -15,6 +15,7 @@ effect on transition_task), so the reverse dependency would be a cycle.
 """
 
 import uuid
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from sqlalchemy import select
@@ -22,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from acc.commands._base import EventSink, UnitOfWork, unit_of_work
 from acc.commands._task_mutations import apply_status_change, lock_task_by_id
-from acc.db.models import AgentRun, Job
+from acc.db.models import AgentRun, FileChange, Job
 from acc.db.session import SessionFactory
 from acc.domain.agent_run import ACTIVE, RunStatus, validate_run_transition
 from acc.domain.errors import Conflict, NotFound
@@ -154,15 +155,38 @@ async def enqueue_start_run(
 
 
 async def mark_run_starting(
-    sf: SessionFactory, sink: EventSink | None, *, actor: str, run_id: uuid.UUID, container_id: str
+    sf: SessionFactory,
+    sink: EventSink | None,
+    *,
+    actor: str,
+    run_id: uuid.UUID,
+    container_id: str,
+    workspace_ref: str | None = None,
+    branch_name: str | None = None,
 ) -> None:
-    """Called by the orchestrator's launcher (M2) right after the container is created."""
+    """Called by the orchestrator's launcher right after the container is created.
+
+    workspace_ref/branch_name (M3): set here, by the launcher, before the container even
+    starts — not self-reported by the runner later. The launcher computes the branch
+    name deterministically from the task key (PLAN-PHASE-2-M3.md §3), so this is
+    authoritative from our side; the runner is only ever told what to push to, never in
+    a position to claim it pushed somewhere else.
+    """
     async with unit_of_work(sf, sink) as uow:
         run = await _lock_run(uow.session, run_id)
         validate_run_transition(RunStatus(run.status), RunStatus.STARTING)
         run.status = RunStatus.STARTING.value
         run.container_id = container_id
         run.started_at = utcnow()
+        if workspace_ref is not None:
+            run.workspace_ref = workspace_ref
+        if branch_name is not None:
+            run.branch_name = branch_name
+            # Visible to the operator as soon as it's decided, not only once a run
+            # finishes — the fix noted in PLAN-PHASE-2-M3.md §1 (tasks.branch_name had a
+            # writer for the column but nothing ever called it before this milestone).
+            task = await lock_task_by_id(uow.session, run.task_id)
+            task.branch_name = branch_name
         await _emit_run(
             uow, run, EventType.RUN_STARTED, RunStarted(id=run.id, container_id=container_id),
             actor=actor,
@@ -329,6 +353,32 @@ async def request_cancel(
         uow.session.add(Job(kind="cancel_run", payload={"run_id": str(run.id)}))
 
 
-# record_tool_call / record_usage (writing tool_calls / usage_records) are added in M3
-# alongside acc.adapters.claude_agent_sdk and the internal API that calls them — nothing
-# produces that data yet, so there is nothing to test against until then.
+async def record_file_changes(
+    sf: SessionFactory,
+    sink: EventSink | None,
+    *,
+    run_id: uuid.UUID,
+    changes: Sequence[Mapping[str, Any]],
+) -> None:
+    """No event emitted per call — same reasoning as record_step's silence on heartbeats:
+    a diff can touch many files in one report, and the run's file-changes view
+    (acc.queries.runs, GET /api/v1/runs/{id}/file-changes) reads this table directly, not
+    the event feed. Each mapping: {path, change_type, additions?, deletions?}."""
+    async with unit_of_work(sf, sink) as uow:
+        run = await _lock_run(uow.session, run_id)  # confirms the run exists
+        for change in changes:
+            uow.session.add(
+                FileChange(
+                    run_id=run.id,
+                    task_id=run.task_id,
+                    path=change["path"],
+                    change_type=change["change_type"],
+                    additions=change.get("additions"),
+                    deletions=change.get("deletions"),
+                )
+            )
+
+
+# record_tool_call / record_usage (writing tool_calls / usage_records) are M4's Claude
+# Agent SDK adapter's concern — nothing produces that data yet, so there is nothing to
+# test against until then.

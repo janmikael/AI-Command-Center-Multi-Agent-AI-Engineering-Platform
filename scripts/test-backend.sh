@@ -10,7 +10,7 @@ set -a
 . ./.env
 set +a
 
-docker compose -f compose.yml -f compose.dev.yml up -d --wait postgres redis docker-socket-proxy >/dev/null
+docker compose -f compose.yml -f compose.dev.yml up -d --wait postgres redis docker-socket-proxy git-test-server >/dev/null
 docker compose -f compose.yml -f compose.dev.yml build runner >/dev/null
 
 export ACC_TEST_DATABASE_URL="postgresql+asyncpg://acc_app:${ACC_APP_DB_PASSWORD}@127.0.0.1:${ACC_PG_PORT:-5432}/acc_test"
@@ -19,6 +19,10 @@ export ACC_TEST_REDIS_URL="redis://:${REDIS_PASSWORD}@127.0.0.1:${ACC_REDIS_PORT
 # The launcher's own integration tests (tests/integration/test_launcher_docker.py) create
 # real containers through this — the same restricted proxy the orchestrator uses.
 export ACC_TEST_DOCKER_PROXY_URL="tcp://127.0.0.1:${ACC_DOCKER_PROXY_PORT:-2375}"
+# The hermetic git remote (PLAN-PHASE-2-M3.md §7) — reachable by name only from inside
+# the runner-egress network, i.e. from a launched runner container, not from this host
+# process; tests pass this URL through as GIT_REMOTE_URL, they never connect to it directly.
+export ACC_TEST_GIT_REMOTE_URL="git://git-test-server:9418/test.git"
 
 cd backend
 exec uv run pytest "$@"

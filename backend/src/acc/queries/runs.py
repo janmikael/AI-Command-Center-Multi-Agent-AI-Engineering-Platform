@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy import Select, select
 
-from acc.db.models import Agent, AgentRun, Task
+from acc.db.models import Agent, AgentRun, FileChange, Repository, Task
 from acc.db.session import SessionFactory
 
 
@@ -20,6 +20,7 @@ class RunView:
     status: str
     provider_session_id: str | None
     container_id: str | None
+    workspace_ref: str | None
     branch_name: str | None
     current_step: str | None
     cancel_requested_at: datetime | None
@@ -52,6 +53,7 @@ def _view(run: AgentRun, task_key: str, agent_slug: str) -> RunView:
         status=run.status,
         provider_session_id=run.provider_session_id,
         container_id=run.container_id,
+        workspace_ref=run.workspace_ref,
         branch_name=run.branch_name,
         current_step=run.current_step,
         cancel_requested_at=run.cancel_requested_at,
@@ -92,6 +94,57 @@ async def list_runs(
     async with sf() as s:
         rows = (await s.execute(stmt)).all()
     return [_view(*row) for row in rows]
+
+
+@dataclass(frozen=True)
+class RunRepository:
+    remote_url: str
+    default_branch: str
+
+
+async def get_repository_for_task(sf: SessionFactory, task_id: uuid.UUID) -> RunRepository | None:
+    """None means the task has no linked repository — handle_start_run's cue to skip
+    the git step entirely (PLAN-PHASE-2-M3.md §0.4/§3); most tasks, still today."""
+    async with sf() as s:
+        row = (
+            await s.execute(
+                select(Repository.remote_url, Repository.default_branch)
+                .join(Task, Task.repository_id == Repository.id)
+                .where(Task.id == task_id)
+            )
+        ).one_or_none()
+    return RunRepository(*row) if row else None
+
+
+@dataclass(frozen=True)
+class FileChangeView:
+    id: uuid.UUID
+    path: str
+    change_type: str
+    additions: int | None
+    deletions: int | None
+    created_at: datetime
+
+
+async def list_file_changes(sf: SessionFactory, run_id: uuid.UUID) -> list[FileChangeView]:
+    stmt = (
+        select(FileChange)
+        .where(FileChange.run_id == run_id)
+        .order_by(FileChange.path)
+    )
+    async with sf() as s:
+        rows = (await s.scalars(stmt)).all()
+    return [
+        FileChangeView(
+            id=r.id,
+            path=r.path,
+            change_type=r.change_type,
+            additions=r.additions,
+            deletions=r.deletions,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
 
 
 TERMINAL_STATUSES = ("succeeded", "failed", "cancelled", "timed_out")

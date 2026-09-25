@@ -27,6 +27,7 @@ class TaskSummary:
     project_slug: str
     assignee_slug: str | None
     assignee_name: str | None
+    branch_name: str | None
     created_at: datetime
     updated_at: datetime
     allowed_transitions: list[TaskStatus]
@@ -76,6 +77,7 @@ def _summary(
         project_slug=project_slug,
         assignee_slug=agent_slug,
         assignee_name=agent_name,
+        branch_name=task.branch_name,
         created_at=task.created_at,
         updated_at=task.updated_at,
         allowed_transitions=allowed_transitions(task.status),

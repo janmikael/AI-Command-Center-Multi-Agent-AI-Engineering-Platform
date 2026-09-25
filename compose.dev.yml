@@ -13,6 +13,17 @@ services:
   docker-socket-proxy:
     ports: ["127.0.0.1:${ACC_DOCKER_PROXY_PORT:-2375}:2375"]
 
+  # A hermetic git remote for the launcher's git-touching tests (PLAN-PHASE-2-M3.md §7).
+  # On runner-egress, the same network a launched runner container joins, so its real
+  # clone/push actually reaches this — no dependency on any real hosting provider.
+  git-test-server:
+    build: ./infra/git-test-server
+    image: acc-git-test-server:local
+    volumes:
+      - git_test_repo:/repos
+    networks: [runner-egress]
+    restart: unless-stopped
+
   api:
     command: ["uvicorn", "acc.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000",
               "--reload", "--reload-dir", "/app/src",
@@ -44,3 +55,6 @@ services:
       timeout: 10s
       start_period: 90s
       retries: 6
+
+volumes:
+  git_test_repo:

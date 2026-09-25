@@ -103,6 +103,22 @@ class TestCancel:
         assert_problem(response, 403)
 
 
+class TestFileChanges:
+    async def test_empty_when_none_reported(
+        self, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        task = await create_working_task(signed_in, app)
+        run = await get_run_for_task(signed_in, task["key"])
+        response = await signed_in.get(f"{RUNS}/{run['id']}/file-changes")
+        assert response.status_code == 200
+        assert response.json()["items"] == []
+
+    async def test_unknown_run_is_404(self, signed_in: httpx.AsyncClient) -> None:
+        assert_problem(
+            await signed_in.get(f"{RUNS}/00000000-0000-0000-0000-000000000000/file-changes"), 404
+        )
+
+
 class TestAccessControl:
     async def test_requires_a_session(self, client: httpx.AsyncClient) -> None:
         assert_problem(await client.get(RUNS), 401)

@@ -249,3 +249,74 @@ class TestCompleteAndFail:
         )
         events = (await signed_in.get("/api/v1/events", params={"type": "run.succeeded"})).json()
         assert events["items"][0]["actor"] == "agent:developer"
+
+
+class TestFileChanges:
+    """What the container's own /file-changes call would do — exercised directly here,
+    not by waiting on a real container to reach a live api (PLAN-PHASE-2-M3.md;
+    tests/integration/test_launcher_git.py's module docstring explains the split)."""
+
+    async def test_records_the_reported_changes(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/file-changes",
+            json={
+                "changes": [
+                    {
+                        "path": "ACC_SMOKE_TEST_MARKER.txt",
+                        "change_type": "added",
+                        "additions": 1,
+                        "deletions": 0,
+                    }
+                ]
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+
+        changes = (await signed_in.get(f"/api/v1/runs/{run_id}/file-changes")).json()["items"]
+        assert len(changes) == 1
+        assert changes[0]["path"] == "ACC_SMOKE_TEST_MARKER.txt"
+        assert changes[0]["change_type"] == "added"
+        assert changes[0]["additions"] == 1
+        assert changes[0]["deletions"] == 0
+
+    async def test_rejects_an_invalid_change_type(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/file-changes",
+            json={"changes": [{"path": "x.py", "change_type": "obliterated"}]},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_rejects_an_empty_batch(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/file-changes",
+            json={"changes": []},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 422
+
+    async def test_requires_authentication(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, _ = await create_run(signed_in, app)
+        response = await client.post(
+            f"/internal/runs/{run_id}/file-changes",
+            json={"changes": [{"path": "x.py", "change_type": "added"}]},
+        )
+        assert response.status_code == 401
