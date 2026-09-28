@@ -64,70 +64,118 @@ AGENTS: tuple[AgentSeed, ...] = (
 )
 
 
-# (category, title, statement, effect) — verbatim from the original governance brief.
-GOVERNANCE_RULES: tuple[tuple[str, str, str, str], ...] = (
-    ("security", "Never expose secrets", "Never expose secrets.", "deny"),
+# (category, title, statement, effect, match) — statement/effect/category verbatim from
+# the original governance brief. match (PLAN-PHASE-2-M4.md, "governance enforcement
+# data"): the minimum structure the existing can_use_tool gate (runner/agent_sdk.py's
+# rule_matches) can mechanically evaluate today — {"tool": ..., "command_regex": ...},
+# checked against Bash's own `command` argument, since that's the only allowed tool with
+# a free-text argument a regex can meaningfully match. Deliberately not exhaustive: a
+# real attacker has many ways to reference a secret file or run a paid API call that no
+# fixed regex list catches completely — the statement text still reaches the model as
+# prompt guidance regardless (acc.queries.context.render_system_prompt), same as before.
+# This is real, minimum, mechanical coverage added to existing rules, not a governance
+# redesign: no new rules, no new effects, no approval-execution mechanism.
+# advisory/allow rules keep match={} — the gate only ever evaluates deny/require_approval
+# effects (runner/agent_sdk.py's make_can_use_tool), so a match here would be inert.
+GOVERNANCE_RULES: tuple[tuple[str, str, str, str, dict[str, str]], ...] = (
+    (
+        "security", "Never expose secrets", "Never expose secrets.", "deny",
+        {
+            "tool": "Bash",
+            "command_regex": r"\.env\b|\.pem\b|id_rsa|credentials\.json|\bprintenv\b",
+        },
+    ),
     (
         "security",
         "Never access protected credentials",
         "Never access protected credentials.",
         "deny",
+        {
+            "tool": "Bash",
+            "command_regex": r"\.aws/credentials|\.ssh/id_|/etc/shadow|\.netrc\b|\.pgpass\b"
+            r"|\.git-credentials\b",
+        },
     ),
     (
         "security",
         "Never bypass approval requirements",
         "Never bypass approval requirements.",
         "deny",
+        {"tool": "Bash", "command_regex": r"--no-verify\b|\bsudo\b"},
     ),
     (
         "tools",
         "Free tools can be used automatically",
         "Free tools can be used automatically.",
         "allow",
+        {},
     ),
-    ("tools", "Paid tools require approval", "Paid tools require approval.", "require_approval"),
+    (
+        "tools", "Paid tools require approval", "Paid tools require approval.",
+        "require_approval",
+        {"tool": "Bash", "command_regex": r"\b(aws|gcloud|az|terraform|stripe|openai)\b"},
+    ),
     (
         "tools",
         "Third-party services/APIs require approval",
         "Third-party services/APIs require approval before connection.",
         "require_approval",
+        {"tool": "Bash", "command_regex": r"\b(curl|wget|nc|ssh)\b"},
     ),
     (
         "tools",
         "Unknown external tools require approval",
         "Unknown external tools require approval.",
         "require_approval",
+        {
+            "tool": "Bash",
+            "command_regex": r"\b(pip3?\s+install|npm\s+install|apt(-get)?\s+install"
+            r"|brew\s+install|gem\s+install)\b",
+        },
     ),
     (
         "code",
         "Run tests before completing tasks",
         "Run tests before completing tasks.",
         "advisory",
+        {},
     ),
-    ("code", "Review changes before merge", "Review changes before merge.", "advisory"),
+    ("code", "Review changes before merge", "Review changes before merge.", "advisory", {}),
     (
         "code",
         "Never delete important files without approval",
         "Never delete important files without approval.",
         "require_approval",
+        {"tool": "Bash", "command_regex": r"\brm\b|\brmdir\b|\bunlink\b|\bgit\s+rm\b"},
     ),
     (
         "infrastructure",
         "Production deployment requires approval",
         "Production deployment requires approval.",
         "require_approval",
+        {
+            "tool": "Bash",
+            "command_regex": r"\bkubectl\b|\bdocker\s+push\b|\bhelm\s+(install|upgrade)\b"
+            r"|\bterraform\s+apply\b",
+        },
     ),
     (
         "infrastructure",
         "Database migrations require approval",
         "Database migrations require approval.",
         "require_approval",
+        {"tool": "Bash", "command_regex": r"\balembic\s+(upgrade|downgrade)\b|\bmigrate\b"},
     ),
     (
         "infrastructure",
         "Destructive commands require approval",
         "Destructive commands require approval.",
         "require_approval",
+        {
+            "tool": "Bash",
+            "command_regex": r"\brm\s+-[a-zA-Z]*f\b|\bdd\s+if=|\bmkfs\b|\bshutdown\b|\breboot\b"
+            r"|drop\s+table|drop\s+database|push\s+--force|--force\b.*push",
+        },
     ),
 )
 
@@ -206,10 +254,13 @@ async def seed(sf: SessionFactory, sink: EventSink | None = None) -> SeedResult:
                     agent_slug=spec.slug,
                 )
 
-        for category, title, statement, effect in GOVERNANCE_RULES:
+        for category, title, statement, effect, match in GOVERNANCE_RULES:
             rule_id = await s.scalar(
                 insert(GovernanceRule)
-                .values(category=category, title=title, statement=statement, effect=effect)
+                .values(
+                    category=category, title=title, statement=statement, effect=effect,
+                    match=match,
+                )
                 .on_conflict_do_nothing(index_elements=["title"])
                 .returning(GovernanceRule.id)
             )

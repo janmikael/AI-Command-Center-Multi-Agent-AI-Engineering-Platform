@@ -69,6 +69,7 @@ def build_container_config(
     settings: Settings,
     repository: RunRepository | None = None,
     branch_name: str | None = None,
+    agent_adapter: str = "none",
 ) -> dict[str, Any]:
     """Pure: the exact request body sent to docker-socket-proxy's /containers/create.
     No I/O, no Docker client — testable on its own (tests/unit/test_launcher.py).
@@ -76,6 +77,13 @@ def build_container_config(
     repository/branch_name (M3): both None for a task with no linked repository — the
     runner's git step is entirely conditional on GIT_REMOTE_URL being present, so a
     plain task's container config is byte-for-byte what M2 already produced.
+
+    agent_adapter (M4): "none" (the default) produces a container byte-for-byte
+    identical to every prior milestone's — the runner falls back to its old
+    git-workflow-or-heartbeat dispatch, unchanged. Only "claude_agent_sdk" adds anything
+    (PLAN-PHASE-2-M4.md §1/§9): AGENT_ADAPTER plus the SDK's own credential and
+    configurable run limits, all absent for every other value, same conditional-injection
+    pattern M3 already established for GIT_CREDENTIAL.
     """
     env = [
         f"RUN_ID={run_id}",
@@ -96,6 +104,16 @@ def build_container_config(
         # read, and nothing to redact if it were ever logged (PLAN-PHASE-2-M3.md §2.3).
         if settings.git_credential is not None:
             env.append(f"GIT_CREDENTIAL={settings.git_credential.get_secret_value()}")
+    if agent_adapter == "claude_agent_sdk":
+        assert settings.anthropic_api_key is not None, (
+            "handle_start_run must check anthropic_api_key before calling this"
+        )
+        env += [
+            "AGENT_ADAPTER=claude_agent_sdk",
+            f"ANTHROPIC_API_KEY={settings.anthropic_api_key.get_secret_value()}",
+            f"RUN_MAX_TURNS={settings.run_max_turns}",
+            f"RUN_MAX_COST_USD={settings.run_max_cost_usd}",
+        ]
     return {
         "Image": settings.runner_image,
         "Env": env,
@@ -149,6 +167,19 @@ async def handle_start_run(
     repository = await run_queries.get_repository_for_task(sf, run.task_id)
     branch_name = compute_branch_name(run.task_key, run_id) if repository is not None else None
 
+    agent_runtime = await run_queries.get_agent_runtime(sf, run.agent_id)
+    agent_adapter = agent_runtime.adapter if agent_runtime is not None else "none"
+    if agent_adapter == "claude_agent_sdk" and settings.anthropic_api_key is None:
+        # Caught here, not left to the container to discover: a container launched
+        # without the key would just fail immediately anyway, but only after spending a
+        # container start and a confusing in-container error (PLAN-PHASE-2-M4.md §7).
+        log.error("claude_agent_sdk_run_missing_api_key", run_id=str(run_id))
+        await run_commands.fail_run(
+            sf, sink, actor=ORCHESTRATOR, run_id=run_id,
+            reason="ANTHROPIC_API_KEY is not configured; cannot launch a claude_agent_sdk run",
+        )
+        return
+
     token = mint_run_token(
         run_id=run_id,
         agent_id=run.agent_id,
@@ -162,6 +193,7 @@ async def handle_start_run(
         settings=settings,
         repository=repository,
         branch_name=branch_name,
+        agent_adapter=agent_adapter,
     )
     try:
         container = await docker.containers.create(config, name=f"acc-run-{run_id}")
@@ -230,13 +262,24 @@ async def handle_cancel_run(
 
 
 async def reconcile_active_runs(
-    sf: SessionFactory, sink: EventSink | None, docker: aiodocker.Docker
+    sf: SessionFactory,
+    sink: EventSink | None,
+    docker: aiodocker.Docker,
+    *,
+    max_wall_clock: timedelta | None = None,
 ) -> None:
     """Not a job handler — called directly on a timer by main.py. Reacts to something
     Docker already knows (a container has exited) rather than a time-based heartbeat
     staleness check, which is M5's narrower, separately-staged watchdog concern
     (PLAN-PHASE-2-M2.md §0.6). Runs with a pending cancellation are left to
-    handle_cancel_run; this only catches *unexpected* exits."""
+    handle_cancel_run; this only catches *unexpected* exits.
+
+    max_wall_clock (M4, PLAN-PHASE-2-M4.md §5): an orchestrator-side backstop on top of
+    the SDK's own in-runner max_turns/max_budget_usd — stops a run's container directly
+    regardless of whether the runner process inside it is cooperating, the same way an
+    operator cancel already does. None (main.py's default when unconfigured) disables it,
+    same as every other run limit in this system being configurable rather than assumed.
+    """
     active = [
         *(await run_queries.list_runs(sf, status=RunStatus.STARTING.value, limit=200)),
         *(await run_queries.list_runs(sf, status=RunStatus.RUNNING.value, limit=200)),
@@ -244,6 +287,7 @@ async def reconcile_active_runs(
     for run in active:
         if run.container_id is None or run.cancel_requested_at is not None:
             continue
+
         container = docker.containers.container(run.container_id)
         try:
             info = await container.show()
@@ -256,6 +300,21 @@ async def reconcile_active_runs(
             info = {}
 
         if still_running:
+            if (
+                max_wall_clock is not None
+                and run.started_at is not None
+                and utcnow() - run.started_at > max_wall_clock
+            ):
+                await _stop_and_remove(docker, run.container_id)
+                try:
+                    await run_commands.fail_run(
+                        sf, sink, actor=ORCHESTRATOR, run_id=run.id,
+                        reason=f"wall-clock limit exceeded ({max_wall_clock})",
+                    )
+                except Conflict:
+                    log.info("reconcile_wall_clock_raced_a_finish", run_id=str(run.id))
+                else:
+                    log.warning("run_failed_wall_clock_exceeded", run_id=str(run.id))
             continue
 
         exit_code = info.get("State", {}).get("ExitCode")

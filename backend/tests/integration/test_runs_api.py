@@ -17,10 +17,12 @@ TASKS = "/api/v1/tasks"
 
 
 async def make_runnable(app: FastAPI, slug: str = "developer") -> None:
+    """"stub", not "claude_agent_sdk" — see test_launcher_docker.py's identical helper.
+    Nothing in this file exercises the SDK path itself (PLAN-PHASE-2-M4.md §9)."""
     from acc.db.models import Agent
 
     async with app.state.session_factory() as s, s.begin():
-        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="claude_agent_sdk"))
+        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="stub"))
 
 
 async def create_working_task(client: httpx.AsyncClient, app: FastAPI) -> dict[str, Any]:

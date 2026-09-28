@@ -9,6 +9,7 @@ import contextlib
 import os
 import signal
 import socket
+from datetime import timedelta
 
 import aiodocker
 import structlog
@@ -53,11 +54,15 @@ async def _job_loop(
 
 
 async def _reconcile_loop(
-    sf: SessionFactory, sink: EventSink | None, docker: aiodocker.Docker
+    sf: SessionFactory,
+    sink: EventSink | None,
+    docker: aiodocker.Docker,
+    *,
+    max_wall_clock: timedelta,
 ) -> None:
     while True:
         try:
-            await launcher.reconcile_active_runs(sf, sink, docker)
+            await launcher.reconcile_active_runs(sf, sink, docker, max_wall_clock=max_wall_clock)
             await launcher.cleanup_finished_containers(sf, docker)
         except Exception:
             log.exception("reconcile_loop_tick_failed")
@@ -77,7 +82,10 @@ async def run() -> None:
 
     log.info("orchestrator_started", worker_id=worker_id)
     job_task = asyncio.create_task(_job_loop(sf, handlers, worker_id=worker_id))
-    reconcile_task = asyncio.create_task(_reconcile_loop(sf, sink, docker))
+    max_wall_clock = timedelta(minutes=settings.run_max_wall_clock_minutes)
+    reconcile_task = asyncio.create_task(
+        _reconcile_loop(sf, sink, docker, max_wall_clock=max_wall_clock)
+    )
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()

@@ -24,7 +24,7 @@ ACTOR = "user:seed"
 async def make_finished_run(sf: SessionFactory, *, ended_at: datetime) -> uuid.UUID:
     async with sf() as s, s.begin():
         await s.execute(
-            update(Agent).where(Agent.slug == "developer").values(adapter="claude_agent_sdk")
+            update(Agent).where(Agent.slug == "developer").values(adapter="stub")
         )
     ref = await create_task(
         sf, None, actor=ACTOR, created_by=None, project_slug="acc", title="t", assignee="developer"

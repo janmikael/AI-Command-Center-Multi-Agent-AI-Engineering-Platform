@@ -1,5 +1,6 @@
 """Typed runtime configuration. Every setting comes from an ACC_* environment variable."""
 
+from decimal import Decimal
 from functools import lru_cache
 from typing import Literal, Self
 
@@ -13,7 +14,15 @@ _WEAK_MARKERS = ("change-me", "changeme", "dev-only", "insecure")
 class Settings(BaseSettings):
     # hide_input_in_errors: a validation error must never echo configuration values
     # (connection strings, secrets) into logs or crash output.
-    model_config = SettingsConfigDict(env_prefix="ACC_", extra="ignore", hide_input_in_errors=True)
+    # env_ignore_empty: compose.yml's ${ACC_ANTHROPIC_API_KEY:-} substitution sets an
+    # actually-empty string, not an absent variable, when the operator hasn't configured
+    # one — without this, that would parse as SecretStr(""), which `is not None` checks
+    # (handle_start_run's pre-flight, the production weak-secret guard below) would
+    # wrongly treat as "configured" (PLAN-PHASE-2-M4.md §1/§12; found and fixed during
+    # this milestone's own live verification).
+    model_config = SettingsConfigDict(
+        env_prefix="ACC_", extra="ignore", hide_input_in_errors=True, env_ignore_empty=True
+    )
 
     env: Literal["development", "test", "production"] = "development"
 
@@ -39,6 +48,19 @@ class Settings(BaseSettings):
     # via GIT_CREDENTIAL and consumed only through GIT_ASKPASS (§2.3) — never written to
     # a git remote URL or config file.
     git_credential: SecretStr | None = None
+    # M4 (PLAN-PHASE-2-M4.md §1/§12): the Claude Agent SDK adapter's only credential.
+    # Optional at the type level for the same reason git_credential is — a deployment
+    # that has never enabled a real adapter on any agent (acc.commands.seed keeps every
+    # seeded agent at adapter='none'; enabling one is a deliberate, manual operator
+    # action, never automatic) needs none. Unlike git_credential this one is
+    # billing-capable, not just access-scoped — see PLAN-PHASE-2-M4.md §4.4.
+    anthropic_api_key: SecretStr | None = None
+    # Every run limit below is intentionally configurable, not hardcoded (PLAN-PHASE-2-M4
+    # approval message) — initial values are the "live-test safety defaults" requested
+    # there, not permanent recommendations.
+    run_max_turns: int = Field(default=30, gt=0)
+    run_max_wall_clock_minutes: int = Field(default=15, gt=0)
+    run_max_cost_usd: Decimal = Field(default=Decimal("2.00"), gt=0)
     # Exact origin the browser uses (scheme://host[:port]). Used for the CSRF origin
     # check and to decide whether cookies are marked Secure.
     public_origin: str = "http://localhost"
@@ -78,6 +100,8 @@ class Settings(BaseSettings):
         }
         if self.git_credential is not None:
             secrets["ACC_GIT_CREDENTIAL"] = self.git_credential
+        if self.anthropic_api_key is not None:
+            secrets["ACC_ANTHROPIC_API_KEY"] = self.anthropic_api_key
         for name, value in secrets.items():
             if any(marker in value.get_secret_value().lower() for marker in _WEAK_MARKERS):
                 problems.append(f"{name} still contains a placeholder value")

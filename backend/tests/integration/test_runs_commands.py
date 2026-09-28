@@ -23,10 +23,13 @@ ACTOR = "user:seed"
 
 
 async def _make_runnable(sf: SessionFactory, slug: str = "developer") -> None:
-    """Seeded agents all have adapter='none' (Phase 1); simulate the M3 world where the
-    developer agent has a real adapter wired up."""
+    """Seeded agents all have adapter='none' (Phase 1); simulate a world where the
+    developer agent has *some* real adapter wired up. "stub", not "claude_agent_sdk" —
+    that literal value has real dispatch meaning as of M4 (launcher.handle_start_run),
+    and every test in this file is about the enqueue-on-transition gate/run lifecycle,
+    not the SDK path specifically (PLAN-PHASE-2-M4.md §9)."""
     async with sf() as s, s.begin():
-        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="claude_agent_sdk"))
+        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="stub"))
 
 
 async def _task_to_working(sf: SessionFactory, *, assignee: str | None = "developer") -> str:

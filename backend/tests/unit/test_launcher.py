@@ -194,3 +194,58 @@ class TestRepositoryAwareConfig:
                 run_token="tok", run_id=RUN_ID, agent_id=AGENT_ID, settings=make_settings(),
                 repository=REPO, branch_name=None,
             )
+
+
+class TestAgentAdapterAwareConfig:
+    """PLAN-PHASE-2-M4.md §1/§9: agent_adapter="none" (the default, used by every test
+    above) must keep producing a container byte-for-byte identical to M2/M3 — only
+    "claude_agent_sdk" adds anything, same conditional-injection pattern as repository/
+    git_credential above."""
+
+    def test_default_adapter_produces_byte_identical_env_to_m3(self) -> None:
+        config = build_container_config(
+            run_token="tok", run_id=RUN_ID, agent_id=AGENT_ID, settings=make_settings(),
+        )
+        env = dict(item.split("=", 1) for item in config["Env"])
+        assert set(env) == {
+            "RUN_ID", "AGENT_ID", "RUN_TOKEN", "API_BASE_URL", "HEARTBEAT_INTERVAL_S",
+        }
+
+    def test_claude_agent_sdk_adds_the_adapter_key_and_limits(self) -> None:
+        settings = make_settings(
+            anthropic_api_key=SecretStr("fake-key"), run_max_turns=7, run_max_cost_usd="3.50"
+        )
+        config = build_container_config(
+            run_token="tok", run_id=RUN_ID, agent_id=AGENT_ID, settings=settings,
+            agent_adapter="claude_agent_sdk",
+        )
+        env = dict(item.split("=", 1) for item in config["Env"])
+        assert env["AGENT_ADAPTER"] == "claude_agent_sdk"
+        assert env["ANTHROPIC_API_KEY"] == "fake-key"
+        assert env["RUN_MAX_TURNS"] == "7"
+        assert env["RUN_MAX_COST_USD"] == "3.50"
+
+    def test_missing_api_key_is_a_programming_error_not_a_silent_launch(self) -> None:
+        """acc.orchestrator.launcher.handle_start_run is the real gate (it fails the run
+        cleanly before ever calling this function) — this assertion is the last-resort
+        backstop, matching test_repository_without_branch_name_is_a_programming_error's
+        own reasoning just above."""
+        settings = make_settings()
+        assert settings.anthropic_api_key is None
+        with pytest.raises(AssertionError):
+            build_container_config(
+                run_token="tok", run_id=RUN_ID, agent_id=AGENT_ID, settings=settings,
+                agent_adapter="claude_agent_sdk",
+            )
+
+    def test_other_adapter_values_are_treated_like_none(self) -> None:
+        """A non-"claude_agent_sdk", non-"none" adapter (e.g. a test's own "stub"
+        sentinel used purely to satisfy transition_task's enqueue gate) must still take
+        the legacy container config — only the literal "claude_agent_sdk" means
+        anything to build_container_config."""
+        config = build_container_config(
+            run_token="tok", run_id=RUN_ID, agent_id=AGENT_ID, settings=make_settings(),
+            agent_adapter="stub",
+        )
+        env = dict(item.split("=", 1) for item in config["Env"])
+        assert "AGENT_ADAPTER" not in env

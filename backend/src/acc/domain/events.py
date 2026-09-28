@@ -8,6 +8,7 @@ replay, usage accounting) can rely on the shape.
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
@@ -55,6 +56,8 @@ class EventType(StrEnum):
     RUN_FAILED = "run.failed"
     RUN_CANCELLED = "run.cancelled"
     RUN_TIMED_OUT = "run.timed_out"
+    TOOL_CALL_DENIED = "tool_call.denied"
+    USAGE_RECORDED = "usage.recorded"
 
 
 # Events that count as an agent's *own* activity for derived status. Things done *to* an
@@ -217,6 +220,28 @@ class RunTimedOut(Payload):
     id: uuid.UUID
 
 
+# Every allowed tool call becomes a tool_calls row (M4), not an event — same volume
+# reasoning record_step's silence on heartbeats already established. Only a *denial* is
+# eventful: rare, and something an operator should see live (PLAN-PHASE-2-M4.md §6).
+class ToolCallDenied(Payload):
+    id: uuid.UUID
+    tool: str
+    reason: str = Field(max_length=1000)
+
+
+# One per run, not per turn: query() (the one-shot SDK entry point M4 uses, see
+# PLAN-PHASE-2-M4.md §2) only ever surfaces a ResultMessage — and therefore real
+# usage/cost numbers — once, at the end of the session, not per turn.
+class UsageRecorded(Payload):
+    id: uuid.UUID
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: Decimal
+
+
 PAYLOAD_SCHEMAS: dict[EventType, type[Payload]] = {
     EventType.PROJECT_CREATED: ProjectCreated,
     EventType.REPOSITORY_ADDED: RepositoryAdded,
@@ -242,6 +267,8 @@ PAYLOAD_SCHEMAS: dict[EventType, type[Payload]] = {
     EventType.RUN_FAILED: RunFailed,
     EventType.RUN_CANCELLED: RunCancelled,
     EventType.RUN_TIMED_OUT: RunTimedOut,
+    EventType.TOOL_CALL_DENIED: ToolCallDenied,
+    EventType.USAGE_RECORDED: UsageRecorded,
 }
 
 

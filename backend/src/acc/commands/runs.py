@@ -16,6 +16,7 @@ effect on transition_task), so the reverse dependency would be a cycle.
 
 import uuid
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
@@ -23,11 +24,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from acc.commands._base import EventSink, UnitOfWork, unit_of_work
 from acc.commands._task_mutations import apply_status_change, lock_task_by_id
-from acc.db.models import AgentRun, FileChange, Job
+from acc.db.models import AgentRun, FileChange, Job, ToolCall, UsageRecord
 from acc.db.session import SessionFactory
 from acc.domain.agent_run import ACTIVE, RunStatus, validate_run_transition
 from acc.domain.errors import Conflict, NotFound
 from acc.domain.events import (
+    AgentMessage,
     EventType,
     RunCancelled,
     RunFailed,
@@ -38,9 +40,11 @@ from acc.domain.events import (
     RunSucceeded,
     RunTimedOut,
     Severity,
+    ToolCallDenied,
+    UsageRecorded,
 )
 from acc.domain.task_status import TaskStatus, validate_orchestrator_transition
-from acc.ids import utcnow
+from acc.ids import new_id, utcnow
 
 # Which task status a run's terminal outcome moves its task to. _finish_run below checks
 # each one against task_status.ORCHESTRATOR_ALLOWED via validate_orchestrator_transition
@@ -379,6 +383,114 @@ async def record_file_changes(
             )
 
 
-# record_tool_call / record_usage (writing tool_calls / usage_records) are M4's Claude
-# Agent SDK adapter's concern — nothing produces that data yet, so there is nothing to
-# test against until then.
+async def record_agent_message(
+    sf: SessionFactory, sink: EventSink | None, *, actor: str, run_id: uuid.UUID, text: str
+) -> None:
+    """The first real writer of agent.message (M1 defined it, nothing produced it until
+    M4's Claude Agent SDK adapter). One event per assistant text block — no separate
+    table, unlike tool_calls/usage_records: there is no other detail view that needs to
+    read an agent's messages back, so the event *is* the record (PLAN-PHASE-2-M4.md §6)."""
+    async with unit_of_work(sf, sink) as uow:
+        run = await _lock_run(uow.session, run_id)
+        await _emit_run(uow, run, EventType.AGENT_MESSAGE, AgentMessage(text=text), actor=actor)
+
+
+async def record_tool_call(
+    sf: SessionFactory,
+    sink: EventSink | None,
+    *,
+    actor: str,
+    run_id: uuid.UUID,
+    tool: str,
+    arguments: Mapping[str, Any],
+    allowed: bool,
+    denial_reason: str | None = None,
+) -> None:
+    """Every attempted tool call becomes a tool_calls row — this run's own can_use_tool
+    decision, not a future MCP gateway's (PLAN-PHASE-2-M4.md §4.2/§4.3). No event for an
+    *allowed* call (same volume reasoning as record_step's silence on heartbeats: the
+    run's tool-call view reads this table directly); a *denial* is always eventful — rare
+    and security-relevant enough that an operator should see it live."""
+    async with unit_of_work(sf, sink) as uow:
+        run = await _lock_run(uow.session, run_id)  # confirms the run exists
+        call_id = new_id()
+        uow.session.add(
+            ToolCall(
+                id=call_id,
+                run_id=run.id,
+                tool=tool,
+                arguments=dict(arguments),
+                allowed=allowed,
+                denial_reason=denial_reason,
+                started_at=utcnow(),
+            )
+        )
+        if not allowed:
+            await _emit_run(
+                uow,
+                run,
+                EventType.TOOL_CALL_DENIED,
+                ToolCallDenied(id=call_id, tool=tool, reason=denial_reason or "denied"),
+                actor=actor,
+                severity=Severity.WARN,
+            )
+
+
+async def record_usage(
+    sf: SessionFactory,
+    sink: EventSink | None,
+    *,
+    actor: str,
+    run_id: uuid.UUID,
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int,
+    cache_write_tokens: int,
+    cost_usd: Decimal,
+    cost_source: str = "provider_reported",
+) -> None:
+    """One usage_records row plus the matching bump to agent_runs' own running totals, so
+    the operator-facing run view never has to sum usage_records on every read. One row
+    per model per call: for query() (the one-shot SDK entry point M4 uses), that's one
+    row per run — ResultMessage.model_usage is only ever surfaced once, at the very end,
+    not per turn (PLAN-PHASE-2-M4.md §6)."""
+    async with unit_of_work(sf, sink) as uow:
+        run = await _lock_run(uow.session, run_id)
+        record_id = new_id()
+        uow.session.add(
+            UsageRecord(
+                id=record_id,
+                run_id=run.id,
+                agent_id=run.agent_id,
+                provider=provider,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
+                cost_usd=cost_usd,
+                cost_source=cost_source,
+            )
+        )
+        run.input_tokens += input_tokens
+        run.output_tokens += output_tokens
+        run.cache_read_tokens += cache_read_tokens
+        run.cache_write_tokens += cache_write_tokens
+        run.cost_usd = Decimal(run.cost_usd) + cost_usd
+        await _emit_run(
+            uow,
+            run,
+            EventType.USAGE_RECORDED,
+            UsageRecorded(
+                id=record_id,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
+                cost_usd=cost_usd,
+            ),
+            actor=actor,
+        )

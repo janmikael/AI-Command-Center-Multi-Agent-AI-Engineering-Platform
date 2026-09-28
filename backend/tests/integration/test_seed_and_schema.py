@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
@@ -81,6 +83,59 @@ class TestSeed:
         async with sf() as session:
             adapters = set((await session.scalars(select(Agent.adapter))).all())
         assert adapters == {"none"}
+
+    async def test_seeded_match_patterns_are_persisted(self, sf: SessionFactory) -> None:
+        """PLAN-PHASE-2-M4.md's governance-enforcement-data fix: match is no longer {}
+        for every enforceable rule once seeded fresh."""
+        await seed(sf)
+        async with sf() as session:
+            rules = (await session.scalars(select(GovernanceRule))).all()
+        by_title = {r.title: r for r in rules}
+        for _category, title, _statement, effect, match in GOVERNANCE_RULES:
+            assert by_title[title].match == match
+            if effect in ("deny", "require_approval"):
+                assert match, f"{title!r} is enforceable but has an empty match"
+
+
+class TestGovernanceRuleMatchPatterns:
+    """runner/agent_sdk.py's rule_matches is the actual consumer of this data — these
+    patterns are only "minimum required" if they compile and actually catch a realistic
+    example of what their statement describes."""
+
+    @pytest.mark.parametrize(
+        ("title", "example_command"),
+        [
+            ("Never expose secrets", "cat .env"),
+            ("Never access protected credentials", "cat ~/.aws/credentials"),
+            ("Never bypass approval requirements", "git commit --no-verify"),
+            ("Paid tools require approval", "aws s3 ls"),
+            ("Third-party services/APIs require approval", "curl https://example.com"),
+            ("Unknown external tools require approval", "pip install requests"),
+            ("Never delete important files without approval", "rm old_file.py"),
+            ("Production deployment requires approval", "kubectl apply -f prod.yaml"),
+            ("Database migrations require approval", "alembic upgrade head"),
+            ("Destructive commands require approval", "rm -rf /tmp/build"),
+        ],
+    )
+    def test_pattern_matches_a_realistic_example(self, title: str, example_command: str) -> None:
+        by_title = {r[1]: r for r in GOVERNANCE_RULES}
+        match = by_title[title][4]
+        assert match, f"{title!r} has no match pattern to test"
+        assert re.search(match["command_regex"], example_command), (
+            f"{title!r}'s pattern does not match {example_command!r}"
+        )
+
+    def test_every_command_regex_compiles(self) -> None:
+        for _category, _title, _statement, _effect, match in GOVERNANCE_RULES:
+            if "command_regex" in match:
+                re.compile(match["command_regex"])  # raises re.error if malformed
+
+    def test_advisory_and_allow_rules_have_no_match(self) -> None:
+        """The gate never evaluates these effects (runner/agent_sdk.py's
+        make_can_use_tool) — a match here would be inert, so there is none."""
+        for _category, _title, _statement, effect, match in GOVERNANCE_RULES:
+            if effect in ("advisory", "allow"):
+                assert match == {}
 
 
 class TestConstraints:

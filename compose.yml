@@ -22,6 +22,23 @@ x-api-env: &api-env
   ACC_RUNNER_TOKEN_SECRET: ${ACC_RUNNER_TOKEN_SECRET:?run scripts/init-env.sh}
   ACC_PUBLIC_ORIGIN: ${ACC_PUBLIC_ORIGIN:-http://localhost}
   ACC_LOG_LEVEL: ${ACC_LOG_LEVEL:-INFO}
+  # M3 (PLAN-PHASE-2-M3.md §2.2): optional — a task with no linked repository never needs
+  # it. Read only by acc.orchestrator.launcher.build_container_config, which injects it
+  # into a runner container's GIT_CREDENTIAL env var (never a git remote URL or config
+  # file — consumed only via GIT_ASKPASS, runner/git_askpass.py). Was never actually
+  # reachable through this file before now — a real gap from M3, found while wiring the
+  # M4 settings just below and fixed here rather than left for the first real repository
+  # to hit it.
+  ACC_GIT_CREDENTIAL: ${ACC_GIT_CREDENTIAL:-}
+  # M4 (PLAN-PHASE-2-M4.md §1/§12): optional — a deployment that has never enabled a
+  # real adapter on any agent needs none (acc.commands.seed keeps every seeded agent at
+  # adapter='none'; enabling one is a deliberate, manual operator action, never
+  # automatic). Every run limit below is independently configurable, per the M4 approval
+  # message, not hardcoded; unset falls back to Settings' own defaults.
+  ACC_ANTHROPIC_API_KEY: ${ACC_ANTHROPIC_API_KEY:-}
+  ACC_RUN_MAX_TURNS: ${ACC_RUN_MAX_TURNS:-30}
+  ACC_RUN_MAX_WALL_CLOCK_MINUTES: ${ACC_RUN_MAX_WALL_CLOCK_MINUTES:-15}
+  ACC_RUN_MAX_COST_USD: ${ACC_RUN_MAX_COST_USD:-2.00}
 
 services:
   postgres:

@@ -1,0 +1,5 @@
+# Pinned exact version, same discipline as the runner image tag itself and
+# docker-socket-proxy's tag (PLAN-PHASE-2-M2.md §2.1) — never a floating "latest".
+# Verified installable and importable against this image's base (python:3.13-slim,
+# Debian trixie) before pinning (PLAN-PHASE-2-M4.md §1).
+claude-agent-sdk==0.2.160

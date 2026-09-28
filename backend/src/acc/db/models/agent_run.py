@@ -51,6 +51,7 @@ class AgentRun(Base):
     input_tokens: Mapped[int] = mapped_column(server_default=text("0"))
     output_tokens: Mapped[int] = mapped_column(server_default=text("0"))
     cache_read_tokens: Mapped[int] = mapped_column(server_default=text("0"))
+    cache_write_tokens: Mapped[int] = mapped_column(server_default=text("0"))
     cost_usd: Mapped[Any] = mapped_column(Numeric(12, 6), server_default=text("0"))
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")

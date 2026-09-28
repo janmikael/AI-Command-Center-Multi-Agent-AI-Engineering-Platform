@@ -14,9 +14,11 @@ that we asked correctly.
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import timedelta
 
 import aiodocker
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import select, update
 
 from acc.commands import runs as run_commands
@@ -49,8 +51,13 @@ def cancel_job(run_id: uuid.UUID) -> ClaimedJob:
 
 
 async def make_runnable(sf: SessionFactory, slug: str = "developer") -> None:
+    """"stub", not "claude_agent_sdk": M4 gave that literal value real dispatch meaning
+    (acc.orchestrator.launcher.handle_start_run/build_container_config) — these tests
+    exercise M2/M3's own container lifecycle and must keep getting the legacy runner
+    behavior, not the SDK path (PLAN-PHASE-2-M4.md §9). Any non-"none" adapter still
+    satisfies transition_task's enqueue gate."""
     async with sf() as s, s.begin():
-        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="claude_agent_sdk"))
+        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="stub"))
 
 
 async def enqueue_run(sf: SessionFactory) -> uuid.UUID:
@@ -261,6 +268,118 @@ class TestReconcileActiveRuns:
         assert run.status == RunStatus.STARTING.value  # reconcile left it alone
 
         await launcher._stop_and_remove(docker_client, container_id)
+
+    async def test_wall_clock_limit_stops_and_fails_a_long_running_container(
+        self, sf: SessionFactory, settings: Settings, docker_client: aiodocker.Docker
+    ) -> None:
+        """PLAN-PHASE-2-M4.md §5: an orchestrator-side backstop that stops a run's
+        container directly, the same way an operator cancel already does, regardless of
+        whether the runner process inside it is cooperating."""
+        run_id = await enqueue_run(sf)
+        await launcher.handle_start_run(sf, None, settings, docker_client, start_job(run_id))
+        container_id = (await get_run(sf, run_id)).container_id
+        assert container_id is not None
+
+        await launcher.reconcile_active_runs(
+            sf, None, docker_client, max_wall_clock=timedelta(seconds=0)
+        )
+
+        run = await get_run(sf, run_id)
+        assert run.status == RunStatus.FAILED.value
+        assert "wall-clock" in (run.error or {}).get("reason", "")
+        with pytest.raises(aiodocker.DockerError) as excinfo:
+            await docker_client.containers.container(container_id).show()
+        assert excinfo.value.status == 404
+
+    async def test_no_wall_clock_limit_leaves_a_long_running_container_alone(
+        self, sf: SessionFactory, settings: Settings, docker_client: aiodocker.Docker
+    ) -> None:
+        """Disabled (None, main.py's behavior when unconfigured) is a real, valid state,
+        not just an implementation detail — every run limit in this system is
+        configurable, and "off" must mean off."""
+        run_id = await enqueue_run(sf)
+        await launcher.handle_start_run(sf, None, settings, docker_client, start_job(run_id))
+        container_id = (await get_run(sf, run_id)).container_id
+        assert container_id is not None
+
+        await launcher.reconcile_active_runs(sf, None, docker_client, max_wall_clock=None)
+
+        run = await get_run(sf, run_id)
+        assert run.status == RunStatus.STARTING.value
+        await launcher._stop_and_remove(docker_client, container_id)
+
+
+class TestClaudeAgentSdkPreflight:
+    """PLAN-PHASE-2-M4.md §7: a claude_agent_sdk run with no ANTHROPIC_API_KEY configured
+    must fail cleanly before ever touching Docker — not launch a container that would
+    just fail immediately anyway, after wasting a container start."""
+
+    async def test_missing_api_key_fails_the_run_without_launching_a_container(
+        self, sf: SessionFactory, settings: Settings, docker_client: aiodocker.Docker
+    ) -> None:
+        assert settings.anthropic_api_key is None
+        async with sf() as s, s.begin():
+            await s.execute(
+                update(Agent).where(Agent.slug == "developer").values(adapter="claude_agent_sdk")
+            )
+        ref = await create_task(
+            sf, None, actor=ACTOR, created_by=None, project_slug="acc", title="t",
+            assignee="developer",
+        )
+        version = ref.version
+        for to in (TaskStatus.PLANNING, TaskStatus.WORKING):
+            updated = await transition_task(
+                sf, None, actor=ACTOR, key=ref.key, expected_version=version, to=to
+            )
+            version = updated.version
+        async with sf() as s:
+            run = await s.scalar(select(AgentRun).where(AgentRun.task_id == ref.id))
+        assert run is not None
+
+        await launcher.handle_start_run(sf, None, settings, docker_client, start_job(run.id))
+
+        finished = await get_run(sf, run.id)
+        assert finished.status == RunStatus.FAILED.value
+        assert finished.container_id is None
+        assert "ANTHROPIC_API_KEY" in (finished.error or {}).get("reason", "")
+
+    async def test_configured_api_key_launches_a_real_container(
+        self, sf: SessionFactory, settings: Settings, docker_client: aiodocker.Docker
+    ) -> None:
+        settings_with_key = settings.model_copy(
+            update={"anthropic_api_key": SecretStr("fake-not-a-real-key")}
+        )
+        async with sf() as s, s.begin():
+            await s.execute(
+                update(Agent).where(Agent.slug == "developer").values(adapter="claude_agent_sdk")
+            )
+        ref = await create_task(
+            sf, None, actor=ACTOR, created_by=None, project_slug="acc", title="t",
+            assignee="developer",
+        )
+        version = ref.version
+        for to in (TaskStatus.PLANNING, TaskStatus.WORKING):
+            updated = await transition_task(
+                sf, None, actor=ACTOR, key=ref.key, expected_version=version, to=to
+            )
+            version = updated.version
+        async with sf() as s:
+            run = await s.scalar(select(AgentRun).where(AgentRun.task_id == ref.id))
+        assert run is not None
+
+        await launcher.handle_start_run(
+            sf, None, settings_with_key, docker_client, start_job(run.id)
+        )
+
+        started = await get_run(sf, run.id)
+        assert started.status == RunStatus.STARTING.value
+        assert started.container_id is not None
+        info = await docker_client.containers.container(started.container_id).show()
+        env = dict(item.split("=", 1) for item in info["Config"]["Env"] if "=" in item)
+        assert env["AGENT_ADAPTER"] == "claude_agent_sdk"
+        assert env["ANTHROPIC_API_KEY"] == "fake-not-a-real-key"
+
+        await launcher._stop_and_remove(docker_client, started.container_id)
 
 
 class TestCleanupFinishedContainers:

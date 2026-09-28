@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import select
 
@@ -15,6 +16,7 @@ class RuleView:
     title: str
     statement: str
     effect: str
+    match: dict[str, Any]
     applies_to: list[str]
     priority: int
     enabled: bool
@@ -29,6 +31,7 @@ def _view(rule: GovernanceRule) -> RuleView:
         title=rule.title,
         statement=rule.statement,
         effect=rule.effect,
+        match=rule.match,
         applies_to=rule.applies_to,
         priority=rule.priority,
         enabled=rule.enabled,

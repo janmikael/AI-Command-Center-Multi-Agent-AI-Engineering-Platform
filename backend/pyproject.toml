@@ -32,6 +32,12 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
     "import-linter>=2.1",
+    # Dev-only: lets tests/unit/test_runner_agent_sdk.py import runner/agent_sdk.py and
+    # exercise its pure policy logic (rule_matches/make_can_use_tool) against the real
+    # SDK's own PermissionResultAllow/Deny classes. Not a runtime dependency of the acc
+    # package — runner/ is deliberately not part of it (PLAN-PHASE-2-M2.md). Pinned to
+    # the same exact version as runner/requirements.txt.
+    "claude-agent-sdk==0.2.160",
 ]
 
 [build-system]

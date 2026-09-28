@@ -20,10 +20,12 @@ TASKS = "/api/v1/tasks"
 
 
 async def make_runnable(app: FastAPI, slug: str = "developer") -> None:
+    """"stub", not "claude_agent_sdk" — see test_launcher_docker.py's identical helper.
+    Nothing in this file exercises the SDK path itself (PLAN-PHASE-2-M4.md §9)."""
     from acc.db.models import Agent
 
     async with app.state.session_factory() as s, s.begin():
-        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="claude_agent_sdk"))
+        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="stub"))
 
 
 async def create_run(signed_in: httpx.AsyncClient, app: FastAPI) -> tuple[str, str]:
@@ -320,3 +322,141 @@ class TestFileChanges:
             json={"changes": [{"path": "x.py", "change_type": "added"}]},
         )
         assert response.status_code == 401
+
+
+class TestContext:
+    """GET /internal/runs/{id}/context: PLAN-PHASE-2-M4.md §3's four-layer render,
+    fetched by the Claude Agent SDK adapter (runner/agent_sdk.py) at run start."""
+
+    async def test_returns_the_rendered_context(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        """create_run's own make_runnable helper sets adapter="stub" (M4 gave the literal
+        "claude_agent_sdk" real dispatch meaning elsewhere — see test_launcher_docker.py),
+        so this test sets the real value itself to exercise the actual per-adapter role
+        prompt (acc.queries.context.AGENT_ROLE_PROMPTS), not the "stub"/DB-role fallback
+        already covered by tests/unit/test_context_rendering.py."""
+        from acc.db.models import Agent
+
+        run_id, agent_id = await create_run(signed_in, app)
+        async with app.state.session_factory() as s, s.begin():
+            await s.execute(
+                update(Agent).where(Agent.slug == "developer").values(adapter="claude_agent_sdk")
+            )
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.get(
+            f"/internal/runs/{run_id}/context", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert "Developer agent" in body["system_prompt"]
+        assert "Task: t" in body["task_prompt"]  # the task's title, "t" (see create_run above)
+        assert isinstance(body["governance_rules"], list)
+        assert len(body["governance_rules"]) > 0  # the Phase 1.5 seed rules are enabled
+        assert {"match", "applies_to", "priority", "effect"} <= body["governance_rules"][0].keys()
+        assert body["max_turns"] > 0
+        assert float(body["max_cost_usd"]) > 0
+
+    async def test_requires_authentication(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, _ = await create_run(signed_in, app)
+        assert (await client.get(f"/internal/runs/{run_id}/context")).status_code == 401
+
+    async def test_token_for_a_different_run_is_403(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        token = token_for(str(uuid.uuid4()), agent_id, RUNNER_SECRET)
+        response = await client.get(
+            f"/internal/runs/{run_id}/context", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert response.status_code == 403
+
+
+class TestMessages:
+    async def test_records_an_agent_message_event(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/messages",
+            json={"text": "Looking at the failing test now."},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+        events = (await signed_in.get("/api/v1/events", params={"type": "agent.message"})).json()
+        assert events["items"][0]["payload"]["text"] == "Looking at the failing test now."
+        assert events["items"][0]["actor"] == "agent:developer"
+
+
+class TestToolCalls:
+    async def test_records_an_allowed_call_with_no_event(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/tool-calls",
+            json={"tool": "Read", "arguments": {"file_path": "a.py"}, "allowed": True},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+        events = (await signed_in.get("/api/v1/events", params={"type": "tool_call.denied"})).json()
+        assert events["items"] == []
+
+    async def test_records_a_denied_call_with_an_event(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/tool-calls",
+            json={
+                "tool": "Bash",
+                "arguments": {"command": "rm -rf /"},
+                "allowed": False,
+                "denial_reason": "Denied by policy: no rm -rf",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+        events = (await signed_in.get("/api/v1/events", params={"type": "tool_call.denied"})).json()
+        assert events["items"][0]["payload"]["tool"] == "Bash"
+        assert events["items"][0]["payload"]["reason"] == "Denied by policy: no rm -rf"
+
+
+class TestUsage:
+    async def test_records_usage_and_updates_the_run_totals(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/usage",
+            json={
+                "model": "claude-sonnet-5",
+                "input_tokens": 1000,
+                "output_tokens": 200,
+                "cache_read_tokens": 50,
+                "cache_write_tokens": 10,
+                "cost_usd": "0.123456",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+
+        run = (await signed_in.get(f"/api/v1/runs/{run_id}")).json()
+        assert run["input_tokens"] == 1000
+        assert run["output_tokens"] == 200
+        assert run["cache_read_tokens"] == 50
+        assert run["cache_write_tokens"] == 10
+        assert float(run["cost_usd"]) == 0.123456
+
+        events = (await signed_in.get("/api/v1/events", params={"type": "usage.recorded"})).json()
+        assert events["items"][0]["payload"]["model"] == "claude-sonnet-5"

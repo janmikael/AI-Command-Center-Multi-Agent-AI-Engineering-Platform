@@ -32,6 +32,7 @@ class RunView:
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_write_tokens: int
     cost_usd: Decimal
 
 
@@ -65,6 +66,7 @@ def _view(run: AgentRun, task_key: str, agent_slug: str) -> RunView:
         input_tokens=run.input_tokens,
         output_tokens=run.output_tokens,
         cache_read_tokens=run.cache_read_tokens,
+        cache_write_tokens=run.cache_write_tokens,
         cost_usd=Decimal(run.cost_usd),
     )
 
@@ -94,6 +96,23 @@ async def list_runs(
     async with sf() as s:
         rows = (await s.execute(stmt)).all()
     return [_view(*row) for row in rows]
+
+
+@dataclass(frozen=True)
+class AgentRuntime:
+    """What the launcher needs to decide how a run should actually execute (PLAN-
+    PHASE-2-M4.md §9) — separate from RunView/AgentOut, which are operator-facing."""
+
+    adapter: str
+    model: str | None
+
+
+async def get_agent_runtime(sf: SessionFactory, agent_id: uuid.UUID) -> AgentRuntime | None:
+    async with sf() as s:
+        row = (
+            await s.execute(select(Agent.adapter, Agent.model).where(Agent.id == agent_id))
+        ).one_or_none()
+    return AgentRuntime(*row) if row else None
 
 
 @dataclass(frozen=True)

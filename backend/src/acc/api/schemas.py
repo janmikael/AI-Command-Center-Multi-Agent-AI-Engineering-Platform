@@ -370,6 +370,7 @@ class RunOut(OutModel):
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
+    cache_write_tokens: int
     cost_usd: Decimal
 
 

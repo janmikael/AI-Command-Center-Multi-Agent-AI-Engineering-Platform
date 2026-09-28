@@ -51,8 +51,11 @@ async def wait_until(predicate: Callable[[], Awaitable[bool]], *, timeout_s: flo
 
 
 async def make_runnable(sf: SessionFactory, slug: str = "developer") -> None:
+    """"stub", not "claude_agent_sdk" — see test_launcher_docker.py's identical helper.
+    This file's containers must still take the legacy git-workflow path, not M4's SDK
+    dispatch (PLAN-PHASE-2-M4.md §9)."""
     async with sf() as s, s.begin():
-        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="claude_agent_sdk"))
+        await s.execute(update(Agent).where(Agent.slug == slug).values(adapter="stub"))
 
 
 async def enqueue_run_with_repository(sf: SessionFactory, remote_url: str) -> uuid.UUID:
