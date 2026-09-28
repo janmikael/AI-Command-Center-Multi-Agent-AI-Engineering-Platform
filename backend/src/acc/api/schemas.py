@@ -367,6 +367,10 @@ class RunOut(OutModel):
     ended_at: datetime | None
     last_heartbeat_at: datetime | None
     result_summary: str | None
+    error: dict[str, Any] | None = Field(
+        description="Set once a run fails or times out (PLAN-PHASE-2-M4.2.md §6); "
+        "an existing column that was never surfaced here before this milestone"
+    )
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
@@ -389,6 +393,47 @@ class FileChangeOut(OutModel):
 
 class FileChangeList(ApiModel):
     items: list[FileChangeOut]
+
+
+class ToolCallOut(OutModel):
+    id: uuid.UUID
+    tool: str
+    arguments: dict[str, Any]
+    allowed: bool
+    denial_reason: str | None
+    rule_id: uuid.UUID | None = Field(
+        description="Which governance rule caused a denial, if any (PLAN-PHASE-2-M4.2.md §3)"
+    )
+    blocked_by_effect: str | None = Field(
+        description='"deny" or "require_approval" — approval-state preparation only, '
+        "no approval mechanism exists yet (PLAN-PHASE-2-M4.2.md §3)"
+    )
+    result_excerpt: str | None
+    exit_code: int | None
+    duration_ms: int | None
+    started_at: datetime
+    ended_at: datetime | None
+
+
+class ToolCallList(ApiModel):
+    items: list[ToolCallOut]
+
+
+class UsageRecordOut(OutModel):
+    id: uuid.UUID
+    provider: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: Decimal
+    cost_source: str
+    recorded_at: datetime
+
+
+class UsageRecordList(ApiModel):
+    items: list[UsageRecordOut]
 
 
 # ─── Overview ────────────────────────────────────────────────────────────

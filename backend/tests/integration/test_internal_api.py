@@ -237,6 +237,59 @@ class TestCompleteAndFail:
         assert response.status_code == 204
         run = (await signed_in.get(f"/api/v1/runs/{run_id}")).json()
         assert run["status"] == "failed"
+        assert run["error"]["reason"] == "it broke"
+
+    async def test_fail_details_are_merged_into_the_error_and_surfaced(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        """PLAN-PHASE-2-M4.2.md §6: structured failure classification, not just a flat
+        string — and PLAN-PHASE-2-M4.2.md §2's agent_runs.error surfaced through the
+        operator API for the first time (an existing column that was never exposed
+        before this milestone)."""
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/fail",
+            json={
+                "reason": "max turns reached",
+                "details": {"category": "max_turns", "stop_reason": "max_turns"},
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+        run = (await signed_in.get(f"/api/v1/runs/{run_id}")).json()
+        assert run["error"] == {
+            "reason": "max turns reached", "category": "max_turns", "stop_reason": "max_turns",
+        }
+
+    async def test_a_details_reason_key_never_overrides_the_explicit_reason(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        await client.post(
+            f"/internal/runs/{run_id}/fail",
+            json={"reason": "the real reason", "details": {"reason": "a sneaky override"}},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        run = (await signed_in.get(f"/api/v1/runs/{run_id}")).json()
+        assert run["error"]["reason"] == "the real reason"
+
+    async def test_succeeded_run_has_no_error(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        await client.post(
+            f"/internal/runs/{run_id}/complete",
+            json={"result_summary": "ok"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        run = (await signed_in.get(f"/api/v1/runs/{run_id}")).json()
+        assert run["error"] is None
 
     async def test_events_are_attributed_to_the_agent_not_the_orchestrator(
         self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
@@ -414,6 +467,10 @@ class TestToolCalls:
         run_id, agent_id = await create_run(signed_in, app)
         await reach_running(client, app, run_id, agent_id)
         token = token_for(run_id, agent_id, RUNNER_SECRET)
+        # A real seeded rule's id: tool_calls.rule_id is a genuine foreign key
+        # (PLAN-PHASE-2-M4.2.md §3), so a fabricated uuid correctly 500s here.
+        rules = (await signed_in.get("/api/v1/governance-rules")).json()["items"]
+        rule_id = rules[0]["id"]
         response = await client.post(
             f"/internal/runs/{run_id}/tool-calls",
             json={
@@ -421,6 +478,8 @@ class TestToolCalls:
                 "arguments": {"command": "rm -rf /"},
                 "allowed": False,
                 "denial_reason": "Denied by policy: no rm -rf",
+                "rule_id": rule_id,
+                "blocked_by_effect": "deny",
             },
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -428,6 +487,67 @@ class TestToolCalls:
         events = (await signed_in.get("/api/v1/events", params={"type": "tool_call.denied"})).json()
         assert events["items"][0]["payload"]["tool"] == "Bash"
         assert events["items"][0]["payload"]["reason"] == "Denied by policy: no rm -rf"
+        assert events["items"][0]["payload"]["rule_id"] == rule_id
+        assert events["items"][0]["payload"]["effect"] == "deny"
+
+        calls = (await signed_in.get(f"/api/v1/runs/{run_id}/tool-calls")).json()["items"]
+        assert calls[0]["blocked_by_effect"] == "deny"
+        assert calls[0]["rule_id"] == rule_id
+
+
+class TestToolCallLifecycle:
+    """POST .../tool-calls/{tool_use_id}/complete: the PostToolUse-hook half
+    (PLAN-PHASE-2-M4.2.md §1)."""
+
+    async def test_completes_an_allowed_call(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        await client.post(
+            f"/internal/runs/{run_id}/tool-calls",
+            json={
+                "tool": "Bash", "arguments": {"command": "ls"}, "allowed": True,
+                "tool_use_id": "tu_1",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        response = await client.post(
+            f"/internal/runs/{run_id}/tool-calls/tu_1/complete",
+            json={"duration_ms": 42, "exit_code": 0, "result_excerpt": "file1\nfile2"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+
+        calls = (await signed_in.get(f"/api/v1/runs/{run_id}/tool-calls")).json()["items"]
+        assert calls[0]["duration_ms"] == 42
+        assert calls[0]["exit_code"] == 0
+        assert calls[0]["result_excerpt"] == "file1\nfile2"
+        assert calls[0]["ended_at"] is not None
+
+    async def test_unknown_tool_use_id_is_404(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/tool-calls/never-existed/complete",
+            json={},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert_problem(response, 404)
+
+    async def test_requires_authentication(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, _ = await create_run(signed_in, app)
+        response = await client.post(
+            f"/internal/runs/{run_id}/tool-calls/tu_1/complete", json={}
+        )
+        assert response.status_code == 401
 
 
 class TestUsage:
@@ -460,3 +580,41 @@ class TestUsage:
 
         events = (await signed_in.get("/api/v1/events", params={"type": "usage.recorded"})).json()
         assert events["items"][0]["payload"]["model"] == "claude-sonnet-5"
+
+    async def test_records_an_estimated_partial_usage_report(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        """PLAN-PHASE-2-M4.2.md §5: what a cancelled/crashed session reports — tokens
+        without a provider-confirmed cost figure."""
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/usage",
+            json={
+                "model": "claude-sonnet-5", "input_tokens": 500, "output_tokens": 50,
+                "cost_usd": "0", "cost_source": "estimated",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+
+        records = (await signed_in.get(f"/api/v1/runs/{run_id}/usage")).json()["items"]
+        assert records[0]["cost_source"] == "estimated"
+        assert records[0]["input_tokens"] == 500
+
+    async def test_rejects_an_invalid_cost_source(
+        self, client: httpx.AsyncClient, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        run_id, agent_id = await create_run(signed_in, app)
+        await reach_running(client, app, run_id, agent_id)
+        token = token_for(run_id, agent_id, RUNNER_SECRET)
+        response = await client.post(
+            f"/internal/runs/{run_id}/usage",
+            json={
+                "model": "claude-sonnet-5", "input_tokens": 1, "output_tokens": 1,
+                "cost_usd": "0", "cost_source": "made_up",
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 422

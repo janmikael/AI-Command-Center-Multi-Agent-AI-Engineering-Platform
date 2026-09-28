@@ -59,10 +59,15 @@ async def _reconcile_loop(
     docker: aiodocker.Docker,
     *,
     max_wall_clock: timedelta,
+    timeout_warning_fraction: float,
 ) -> None:
     while True:
         try:
-            await launcher.reconcile_active_runs(sf, sink, docker, max_wall_clock=max_wall_clock)
+            await launcher.reconcile_active_runs(
+                sf, sink, docker,
+                max_wall_clock=max_wall_clock,
+                timeout_warning_fraction=timeout_warning_fraction,
+            )
             await launcher.cleanup_finished_containers(sf, docker)
         except Exception:
             log.exception("reconcile_loop_tick_failed")
@@ -84,7 +89,11 @@ async def run() -> None:
     job_task = asyncio.create_task(_job_loop(sf, handlers, worker_id=worker_id))
     max_wall_clock = timedelta(minutes=settings.run_max_wall_clock_minutes)
     reconcile_task = asyncio.create_task(
-        _reconcile_loop(sf, sink, docker, max_wall_clock=max_wall_clock)
+        _reconcile_loop(
+            sf, sink, docker,
+            max_wall_clock=max_wall_clock,
+            timeout_warning_fraction=settings.run_timeout_warning_fraction,
+        )
     )
 
     stop = asyncio.Event()

@@ -39,6 +39,9 @@ x-api-env: &api-env
   ACC_RUN_MAX_TURNS: ${ACC_RUN_MAX_TURNS:-30}
   ACC_RUN_MAX_WALL_CLOCK_MINUTES: ${ACC_RUN_MAX_WALL_CLOCK_MINUTES:-15}
   ACC_RUN_MAX_COST_USD: ${ACC_RUN_MAX_COST_USD:-2.00}
+  # M4.2 (PLAN-PHASE-2-M4.2.md §7): fraction of the wall-clock limit above at which a
+  # warning event fires, before the unchanged hard kill at 100%.
+  ACC_RUN_TIMEOUT_WARNING_FRACTION: ${ACC_RUN_TIMEOUT_WARNING_FRACTION:-0.8}
 
 services:
   postgres:

@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy import Select, select
 
-from acc.db.models import Agent, AgentRun, FileChange, Repository, Task
+from acc.db.models import Agent, AgentRun, FileChange, Repository, Task, ToolCall, UsageRecord
 from acc.db.session import SessionFactory
 
 
@@ -28,7 +28,9 @@ class RunView:
     started_at: datetime | None
     ended_at: datetime | None
     last_heartbeat_at: datetime | None
+    timeout_warning_emitted_at: datetime | None
     result_summary: str | None
+    error: dict[str, Any] | None
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int
@@ -62,7 +64,9 @@ def _view(run: AgentRun, task_key: str, agent_slug: str) -> RunView:
         started_at=run.started_at,
         ended_at=run.ended_at,
         last_heartbeat_at=run.last_heartbeat_at,
+        timeout_warning_emitted_at=run.timeout_warning_emitted_at,
         result_summary=run.result_summary,
+        error=run.error,
         input_tokens=run.input_tokens,
         output_tokens=run.output_tokens,
         cache_read_tokens=run.cache_read_tokens,
@@ -161,6 +165,84 @@ async def list_file_changes(sf: SessionFactory, run_id: uuid.UUID) -> list[FileC
             additions=r.additions,
             deletions=r.deletions,
             created_at=r.created_at,
+        )
+        for r in rows
+    ]
+
+
+@dataclass(frozen=True)
+class ToolCallView:
+    id: uuid.UUID
+    tool: str
+    arguments: dict[str, Any]
+    allowed: bool
+    denial_reason: str | None
+    rule_id: uuid.UUID | None
+    blocked_by_effect: str | None
+    result_excerpt: str | None
+    exit_code: int | None
+    duration_ms: int | None
+    started_at: datetime
+    ended_at: datetime | None
+
+
+async def list_tool_calls(sf: SessionFactory, run_id: uuid.UUID) -> list[ToolCallView]:
+    stmt = select(ToolCall).where(ToolCall.run_id == run_id).order_by(ToolCall.started_at)
+    async with sf() as s:
+        rows = (await s.scalars(stmt)).all()
+    return [
+        ToolCallView(
+            id=r.id,
+            tool=r.tool,
+            arguments=r.arguments,
+            allowed=r.allowed,
+            denial_reason=r.denial_reason,
+            rule_id=r.rule_id,
+            blocked_by_effect=r.blocked_by_effect,
+            result_excerpt=r.result_excerpt,
+            exit_code=r.exit_code,
+            duration_ms=r.duration_ms,
+            started_at=r.started_at,
+            ended_at=r.ended_at,
+        )
+        for r in rows
+    ]
+
+
+@dataclass(frozen=True)
+class UsageRecordView:
+    id: uuid.UUID
+    provider: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: Decimal
+    cost_source: str
+    recorded_at: datetime
+
+
+async def list_usage(sf: SessionFactory, run_id: uuid.UUID) -> list[UsageRecordView]:
+    stmt = (
+        select(UsageRecord)
+        .where(UsageRecord.run_id == run_id)
+        .order_by(UsageRecord.recorded_at)
+    )
+    async with sf() as s:
+        rows = (await s.scalars(stmt)).all()
+    return [
+        UsageRecordView(
+            id=r.id,
+            provider=r.provider,
+            model=r.model,
+            input_tokens=r.input_tokens,
+            output_tokens=r.output_tokens,
+            cache_read_tokens=r.cache_read_tokens,
+            cache_write_tokens=r.cache_write_tokens,
+            cost_usd=Decimal(r.cost_usd),
+            cost_source=r.cost_source,
+            recorded_at=r.recorded_at,
         )
         for r in rows
     ]

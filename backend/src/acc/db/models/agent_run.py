@@ -46,6 +46,9 @@ class AgentRun(Base):
     started_at: Mapped[datetime | None]
     ended_at: Mapped[datetime | None]
     last_heartbeat_at: Mapped[datetime | None]
+    # Lets reconcile_active_runs emit the wall-clock warning event exactly once per run,
+    # surviving an orchestrator restart (PLAN-PHASE-2-M4.2.md §3).
+    timeout_warning_emitted_at: Mapped[datetime | None]
     result_summary: Mapped[str | None] = mapped_column(Text)
     error: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     input_tokens: Mapped[int] = mapped_column(server_default=text("0"))

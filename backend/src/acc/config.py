@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     run_max_turns: int = Field(default=30, gt=0)
     run_max_wall_clock_minutes: int = Field(default=15, gt=0)
     run_max_cost_usd: Decimal = Field(default=Decimal("2.00"), gt=0)
+    # M4.2 (PLAN-PHASE-2-M4.2.md §2/§7): fraction of run_max_wall_clock_minutes at which
+    # reconcile_active_runs emits a warning event, before the unchanged hard kill at
+    # 100%. Configurable per your instruction that every run limit must be, not
+    # hardcoded — 0.8 is a starting recommendation, not a fixed value.
+    run_timeout_warning_fraction: float = Field(default=0.8, gt=0, lt=1)
     # Exact origin the browser uses (scheme://host[:port]). Used for the CSRF origin
     # check and to decide whether cookies are marked Secure.
     public_origin: str = "http://localhost"

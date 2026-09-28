@@ -267,6 +267,7 @@ async def reconcile_active_runs(
     docker: aiodocker.Docker,
     *,
     max_wall_clock: timedelta | None = None,
+    timeout_warning_fraction: float | None = None,
 ) -> None:
     """Not a job handler — called directly on a timer by main.py. Reacts to something
     Docker already knows (a container has exited) rather than a time-based heartbeat
@@ -279,6 +280,11 @@ async def reconcile_active_runs(
     regardless of whether the runner process inside it is cooperating, the same way an
     operator cancel already does. None (main.py's default when unconfigured) disables it,
     same as every other run limit in this system being configurable rather than assumed.
+
+    timeout_warning_fraction (M4.2, PLAN-PHASE-2-M4.2.md §2/§7): fires a warning event
+    once (agent_runs.timeout_warning_emitted_at guards the repeat, surviving a restart)
+    when a run crosses this fraction of max_wall_clock — observability only, does not
+    change when the hard kill above actually fires.
     """
     active = [
         *(await run_queries.list_runs(sf, status=RunStatus.STARTING.value, limit=200)),
@@ -315,6 +321,20 @@ async def reconcile_active_runs(
                     log.info("reconcile_wall_clock_raced_a_finish", run_id=str(run.id))
                 else:
                     log.warning("run_failed_wall_clock_exceeded", run_id=str(run.id))
+                continue
+
+            if (
+                max_wall_clock is not None
+                and timeout_warning_fraction is not None
+                and run.started_at is not None
+                and run.timeout_warning_emitted_at is None
+                and utcnow() - run.started_at > max_wall_clock * timeout_warning_fraction
+            ):
+                remaining = max_wall_clock - (utcnow() - run.started_at)
+                await run_commands.record_timeout_warning(
+                    sf, sink, actor=ORCHESTRATOR, run_id=run.id,
+                    remaining_seconds=max(0, int(remaining.total_seconds())),
+                )
             continue
 
         exit_code = info.get("State", {}).get("ExitCode")

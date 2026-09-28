@@ -10,7 +10,16 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 
 from acc.api.deps import EventSinkDep, OperatorDep, SessionFactoryDep
-from acc.api.schemas import FileChangeList, FileChangeOut, RunList, RunOut
+from acc.api.schemas import (
+    FileChangeList,
+    FileChangeOut,
+    RunList,
+    RunOut,
+    ToolCallList,
+    ToolCallOut,
+    UsageRecordList,
+    UsageRecordOut,
+)
 from acc.commands import runs as run_commands
 from acc.db.session import SessionFactory
 from acc.domain.errors import NotFound
@@ -58,3 +67,21 @@ async def list_file_changes(
     await _run(sf, run_id)  # 404 on an unknown run, same as every other nested read
     changes = await run_queries.list_file_changes(sf, run_id)
     return FileChangeList(items=[FileChangeOut.model_validate(c) for c in changes])
+
+
+@router.get("/{run_id}/tool-calls")
+async def list_tool_calls(
+    run_id: uuid.UUID, _: OperatorDep, sf: SessionFactoryDep
+) -> ToolCallList:
+    """PLAN-PHASE-2-M4.2.md §2 — tool call visibility in the dashboard, mirroring
+    file-changes exactly."""
+    await _run(sf, run_id)
+    calls = await run_queries.list_tool_calls(sf, run_id)
+    return ToolCallList(items=[ToolCallOut.model_validate(c) for c in calls])
+
+
+@router.get("/{run_id}/usage")
+async def list_usage(run_id: uuid.UUID, _: OperatorDep, sf: SessionFactoryDep) -> UsageRecordList:
+    await _run(sf, run_id)
+    records = await run_queries.list_usage(sf, run_id)
+    return UsageRecordList(items=[UsageRecordOut.model_validate(r) for r in records])

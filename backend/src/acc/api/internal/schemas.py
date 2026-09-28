@@ -26,6 +26,10 @@ class CompleteIn(ApiModel):
 
 class FailIn(ApiModel):
     reason: Summary
+    # M4.2 (PLAN-PHASE-2-M4.2.md §3/§6): optional structured extras merged into the
+    # existing agent_runs.error JSONB alongside reason — a failure category, the SDK's
+    # own stop_reason/api_error_status when it has one. No schema change on the DB side.
+    details: dict[str, Any] | None = None
 
 
 class FileChangeIn(ApiModel):
@@ -49,6 +53,19 @@ class ToolCallIn(ApiModel):
     arguments: dict[str, Any]
     allowed: bool
     denial_reason: Annotated[str, StringConstraints(max_length=1000)] | None = None
+    # M4.2 (PLAN-PHASE-2-M4.2.md §1/§3): tool_use_id correlates this row with its later
+    # completion report (POST .../tool-calls/{tool_use_id}/complete) — only meaningful
+    # for an allowed call, which is the only kind that actually executes. rule_id/
+    # blocked_by_effect are traceability + approval-state preparation, not enforcement.
+    tool_use_id: Annotated[str, StringConstraints(max_length=200)] | None = None
+    rule_id: uuid.UUID | None = None
+    blocked_by_effect: Literal["deny", "require_approval"] | None = None
+
+
+class ToolCallCompleteIn(ApiModel):
+    duration_ms: int | None = Field(default=None, ge=0)
+    exit_code: int | None = None
+    result_excerpt: Annotated[str, StringConstraints(max_length=4000)] | None = None
 
 
 class UsageIn(ApiModel):
@@ -59,6 +76,10 @@ class UsageIn(ApiModel):
     cache_read_tokens: int = Field(ge=0, default=0)
     cache_write_tokens: int = Field(ge=0, default=0)
     cost_usd: Decimal = Field(ge=0)
+    # M4.2 (PLAN-PHASE-2-M4.2.md §5): "estimated" for the partial-usage report a
+    # cancelled/crashed session sends (no provider-confirmed cost exists for it yet);
+    # "provider_reported" (the default) for a normal completed session's real figure.
+    cost_source: Literal["provider_reported", "estimated"] = "provider_reported"
 
 
 class ContextGovernanceRuleOut(ApiModel):

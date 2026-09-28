@@ -39,6 +39,7 @@ from acc.domain.events import (
     RunStep,
     RunSucceeded,
     RunTimedOut,
+    RunTimeoutWarning,
     Severity,
     ToolCallDenied,
     UsageRecorded,
@@ -290,11 +291,21 @@ async def complete_run(
 
 
 async def fail_run(
-    sf: SessionFactory, sink: EventSink | None, *, actor: str, run_id: uuid.UUID, reason: str
+    sf: SessionFactory,
+    sink: EventSink | None,
+    *,
+    actor: str,
+    run_id: uuid.UUID,
+    reason: str,
+    details: Mapping[str, Any] | None = None,
 ) -> None:
+    """details (M4.2, PLAN-PHASE-2-M4.2.md §3/§6): optional structured extras — a
+    failure category, the SDK's own stop_reason/api_error_status when it has one —
+    merged alongside reason into the existing error JSONB. No schema change: the column
+    was already shaped for this, only the content was ever a single flat string."""
     async with unit_of_work(sf, sink) as uow:
         run = await _lock_run(uow.session, run_id)
-        run.error = {"reason": reason}
+        run.error = {**(details or {}), "reason": reason}  # reason always wins on conflict
         await _finish_run(
             uow,
             run,
@@ -405,12 +416,22 @@ async def record_tool_call(
     arguments: Mapping[str, Any],
     allowed: bool,
     denial_reason: str | None = None,
-) -> None:
+    tool_use_id: str | None = None,
+    rule_id: uuid.UUID | None = None,
+    blocked_by_effect: str | None = None,
+) -> uuid.UUID:
     """Every attempted tool call becomes a tool_calls row — this run's own can_use_tool
     decision, not a future MCP gateway's (PLAN-PHASE-2-M4.md §4.2/§4.3). No event for an
     *allowed* call (same volume reasoning as record_step's silence on heartbeats: the
     run's tool-call view reads this table directly); a *denial* is always eventful — rare
-    and security-relevant enough that an operator should see it live."""
+    and security-relevant enough that an operator should see it live.
+
+    Returns the new row's id. tool_use_id (M4.2, PLAN-PHASE-2-M4.2.md §1.2): present for
+    an *allowed* call — complete_tool_call uses it to find this row again once the call
+    actually finishes; absent for a denied call, which never executes and has nothing to
+    complete. rule_id/blocked_by_effect: traceability + approval-state preparation only
+    (§3) — a require_approval match still denies today, exactly like deny.
+    """
     async with unit_of_work(sf, sink) as uow:
         run = await _lock_run(uow.session, run_id)  # confirms the run exists
         call_id = new_id()
@@ -422,6 +443,9 @@ async def record_tool_call(
                 arguments=dict(arguments),
                 allowed=allowed,
                 denial_reason=denial_reason,
+                tool_use_id=tool_use_id if allowed else None,
+                rule_id=rule_id,
+                blocked_by_effect=blocked_by_effect,
                 started_at=utcnow(),
             )
         )
@@ -430,10 +454,70 @@ async def record_tool_call(
                 uow,
                 run,
                 EventType.TOOL_CALL_DENIED,
-                ToolCallDenied(id=call_id, tool=tool, reason=denial_reason or "denied"),
+                ToolCallDenied(
+                    id=call_id,
+                    tool=tool,
+                    reason=denial_reason or "denied",
+                    rule_id=rule_id,
+                    effect=blocked_by_effect,
+                ),
                 actor=actor,
                 severity=Severity.WARN,
             )
+    return call_id
+
+
+async def complete_tool_call(
+    sf: SessionFactory,
+    sink: EventSink | None,
+    *,
+    run_id: uuid.UUID,
+    tool_use_id: str,
+    duration_ms: int | None,
+    exit_code: int | None,
+    result_excerpt: str | None,
+) -> None:
+    """The PostToolUse-hook half of the tool call lifecycle (PLAN-PHASE-2-M4.2.md §1) —
+    updates the row record_tool_call already created, found by (run_id, tool_use_id). No
+    event: this enriches an already-recorded fact, it doesn't introduce a new one (same
+    reasoning as every other completion write in this module)."""
+    async with unit_of_work(sf, sink) as uow:
+        await _lock_run(uow.session, run_id)  # confirms the run exists
+        call = await uow.session.scalar(
+            select(ToolCall).where(
+                ToolCall.run_id == run_id, ToolCall.tool_use_id == tool_use_id
+            )
+        )
+        if call is None:
+            raise NotFound(
+                f"No tool call {tool_use_id} for run {run_id}",
+                run_id=str(run_id),
+                tool_use_id=tool_use_id,
+            )
+        call.ended_at = utcnow()
+        call.duration_ms = duration_ms
+        call.exit_code = exit_code
+        call.result_excerpt = result_excerpt
+
+
+async def record_timeout_warning(
+    sf: SessionFactory, sink: EventSink | None, *, actor: str, run_id: uuid.UUID,
+    remaining_seconds: int,
+) -> None:
+    """Called once per run by reconcile_active_runs when it crosses
+    run_timeout_warning_fraction of the wall-clock limit (PLAN-PHASE-2-M4.2.md §2/§7) —
+    observability only; does not change when the hard kill actually fires."""
+    async with unit_of_work(sf, sink) as uow:
+        run = await _lock_run(uow.session, run_id)
+        run.timeout_warning_emitted_at = utcnow()
+        await _emit_run(
+            uow,
+            run,
+            EventType.RUN_TIMEOUT_WARNING,
+            RunTimeoutWarning(id=run.id, remaining_seconds=remaining_seconds),
+            actor=actor,
+            severity=Severity.WARN,
+        )
 
 
 async def record_usage(

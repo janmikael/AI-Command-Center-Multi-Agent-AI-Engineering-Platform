@@ -18,6 +18,7 @@ from acc.api.internal.schemas import (
     HeartbeatIn,
     HeartbeatOut,
     RunContextOut,
+    ToolCallCompleteIn,
     ToolCallIn,
     UsageIn,
 )
@@ -65,7 +66,9 @@ async def fail(
     claims: RunClaimsDep, body: FailIn, sf: SessionFactoryDep, sink: EventSinkDep
 ) -> None:
     actor = await _actor_for(sf, claims.run_id)
-    await run_commands.fail_run(sf, sink, actor=actor, run_id=claims.run_id, reason=body.reason)
+    await run_commands.fail_run(
+        sf, sink, actor=actor, run_id=claims.run_id, reason=body.reason, details=body.details
+    )
 
 
 @router.post("/file-changes", status_code=204)
@@ -133,6 +136,31 @@ async def tool_call(
         arguments=body.arguments,
         allowed=body.allowed,
         denial_reason=body.denial_reason,
+        tool_use_id=body.tool_use_id,
+        rule_id=body.rule_id,
+        blocked_by_effect=body.blocked_by_effect,
+    )
+
+
+@router.post("/tool-calls/{tool_use_id}/complete", status_code=204)
+async def tool_call_complete(
+    claims: RunClaimsDep,
+    tool_use_id: str,
+    body: ToolCallCompleteIn,
+    sf: SessionFactoryDep,
+    sink: EventSinkDep,
+) -> None:
+    """The PostToolUse-hook half of the tool call lifecycle (PLAN-PHASE-2-M4.2.md §1) —
+    404s if no matching row exists (a genuinely unknown tool_use_id, or one belonging to
+    a denied call that never executed and was never given one)."""
+    await run_commands.complete_tool_call(
+        sf,
+        sink,
+        run_id=claims.run_id,
+        tool_use_id=tool_use_id,
+        duration_ms=body.duration_ms,
+        exit_code=body.exit_code,
+        result_excerpt=body.result_excerpt,
     )
 
 
@@ -153,4 +181,5 @@ async def usage(
         cache_read_tokens=body.cache_read_tokens,
         cache_write_tokens=body.cache_write_tokens,
         cost_usd=body.cost_usd,
+        cost_source=body.cost_source,
     )

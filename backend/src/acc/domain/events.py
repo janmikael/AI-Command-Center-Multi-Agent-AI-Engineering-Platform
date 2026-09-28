@@ -58,6 +58,7 @@ class EventType(StrEnum):
     RUN_TIMED_OUT = "run.timed_out"
     TOOL_CALL_DENIED = "tool_call.denied"
     USAGE_RECORDED = "usage.recorded"
+    RUN_TIMEOUT_WARNING = "run.timeout_warning"
 
 
 # Events that count as an agent's *own* activity for derived status. Things done *to* an
@@ -220,13 +221,26 @@ class RunTimedOut(Payload):
     id: uuid.UUID
 
 
+# Fires once per run (agent_runs.timeout_warning_emitted_at guards against a repeat on
+# every reconcile tick), before the unchanged hard kill at 100% of the wall-clock limit
+# (PLAN-PHASE-2-M4.2.md §2/§7) — observability only, not a change to enforcement.
+class RunTimeoutWarning(Payload):
+    id: uuid.UUID
+    remaining_seconds: int
+
+
 # Every allowed tool call becomes a tool_calls row (M4), not an event — same volume
 # reasoning record_step's silence on heartbeats already established. Only a *denial* is
 # eventful: rare, and something an operator should see live (PLAN-PHASE-2-M4.md §6).
+# rule_id/effect (M4.2, PLAN-PHASE-2-M4.2.md §1.3): traceability — which rule, and
+# whether it was a hard deny or (today, equivalently enforced) a require_approval match
+# with nowhere yet to route the approval.
 class ToolCallDenied(Payload):
     id: uuid.UUID
     tool: str
     reason: str = Field(max_length=1000)
+    rule_id: uuid.UUID | None = None
+    effect: str | None = None
 
 
 # One per run, not per turn: query() (the one-shot SDK entry point M4 uses, see
@@ -267,6 +281,7 @@ PAYLOAD_SCHEMAS: dict[EventType, type[Payload]] = {
     EventType.RUN_FAILED: RunFailed,
     EventType.RUN_CANCELLED: RunCancelled,
     EventType.RUN_TIMED_OUT: RunTimedOut,
+    EventType.RUN_TIMEOUT_WARNING: RunTimeoutWarning,
     EventType.TOOL_CALL_DENIED: ToolCallDenied,
     EventType.USAGE_RECORDED: UsageRecorded,
 }

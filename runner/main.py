@@ -118,8 +118,9 @@ def run_claude_agent_sdk() -> int:
         WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
 
     api = agent_sdk.RunApi(API_BASE_URL, RUN_ID, RUN_TOKEN)
+    details: dict[str, object] | None
     try:
-        outcome, message = asyncio.run(
+        outcome, message, details = asyncio.run(
             agent_sdk.run_agent(
                 api=api,
                 workspace_dir=str(WORKSPACE_DIR),
@@ -127,9 +128,9 @@ def run_claude_agent_sdk() -> int:
                 max_cost_usd=RUN_MAX_COST_USD,
             )
         )
-    except Exception as exc:  # the SDK/CLI subprocess failing is a run failure, not a crash
+    except Exception as exc:  # a bug in run_agent's own setup, not the SDK session itself
         print(f"agent sdk run failed: {exc}", file=sys.stderr)
-        outcome, message = "failed", f"agent sdk run failed: {exc}"
+        outcome, message, details = "failed", f"agent sdk run failed: {exc}", None
 
     if has_repository:
         try:
@@ -154,7 +155,7 @@ def run_claude_agent_sdk() -> int:
     if outcome == "succeeded":
         _try_post(f"/internal/runs/{RUN_ID}/complete", {"result_summary": message[:4000]})
         return 0
-    _try_post(f"/internal/runs/{RUN_ID}/fail", {"reason": message[:4000]})
+    _try_post(f"/internal/runs/{RUN_ID}/fail", {"reason": message[:4000], "details": details})
     return 1
 
 

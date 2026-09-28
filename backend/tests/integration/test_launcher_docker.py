@@ -19,12 +19,12 @@ from datetime import timedelta
 import aiodocker
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from acc.commands import runs as run_commands
 from acc.commands.tasks import create_task, transition_task
 from acc.config import Settings
-from acc.db.models import Agent, AgentRun, Task
+from acc.db.models import Agent, AgentRun, Event, Task
 from acc.db.session import SessionFactory
 from acc.domain.agent_run import RunStatus
 from acc.domain.task_status import TaskStatus
@@ -306,6 +306,43 @@ class TestReconcileActiveRuns:
 
         run = await get_run(sf, run_id)
         assert run.status == RunStatus.STARTING.value
+        await launcher._stop_and_remove(docker_client, container_id)
+
+    async def test_timeout_warning_fires_once_before_the_hard_kill(
+        self, sf: SessionFactory, settings: Settings, docker_client: aiodocker.Docker
+    ) -> None:
+        """PLAN-PHASE-2-M4.2.md §2/§7: observability only — the run is still genuinely
+        active (STARTING) after the warning, and the hard-kill threshold is unaffected."""
+        run_id = await enqueue_run(sf)
+        await launcher.handle_start_run(sf, None, settings, docker_client, start_job(run_id))
+        container_id = (await get_run(sf, run_id)).container_id
+        assert container_id is not None
+
+        # A wall clock long enough that the hard kill (100%) never fires in this test,
+        # but a warning fraction low enough that the warning threshold is already
+        # crossed by the time this runs.
+        await launcher.reconcile_active_runs(
+            sf, None, docker_client,
+            max_wall_clock=timedelta(hours=1), timeout_warning_fraction=0.0000001,
+        )
+
+        run = await get_run(sf, run_id)
+        assert run.status == RunStatus.STARTING.value  # unaffected — not killed
+        assert run.timeout_warning_emitted_at is not None
+
+        # A second tick must not emit a second warning.
+        await launcher.reconcile_active_runs(
+            sf, None, docker_client,
+            max_wall_clock=timedelta(hours=1), timeout_warning_fraction=0.0000001,
+        )
+        async with sf() as s:
+            count = await s.scalar(
+                select(func.count())
+                .select_from(Event)
+                .where(Event.type == "run.timeout_warning", Event.run_id == run_id)
+            )
+        assert count == 1
+
         await launcher._stop_and_remove(docker_client, container_id)
 
 
