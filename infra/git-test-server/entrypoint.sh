@@ -14,7 +14,33 @@ if [ ! -d "$REPO_DIR" ]; then
   git config user.name "Test Seed"
   git config user.email "seed@test.local"
   echo "hermetic test repository for the acc backend test suite" > README.md
-  git add README.md
+
+  # A small existing module + its test (PLAN-PHASE-2-M4.3.md §2/§3): real content for a
+  # real developer task to read and edit, not just create from nothing. Stdlib unittest,
+  # not pytest — the runner sandbox has no test framework installed beyond Python's own
+  # (PLAN-PHASE-2-M4.md §1's deliberately minimal image), and this way a real task's
+  # `python3 -m unittest` needs nothing extra to actually run.
+  cat > greetings.py <<'PYEOF'
+def greet(name: str) -> str:
+    """Return a friendly greeting for `name`."""
+    return f"Hello, {name}!"
+PYEOF
+  cat > test_greetings.py <<'PYEOF'
+import unittest
+
+from greetings import greet
+
+
+class TestGreet(unittest.TestCase):
+    def test_greet_includes_the_name(self) -> None:
+        self.assertEqual(greet("Ada"), "Hello, Ada!")
+
+
+if __name__ == "__main__":
+    unittest.main()
+PYEOF
+
+  git add README.md greetings.py test_greetings.py
   git commit -m "initial commit"
   git push origin main
   cd /

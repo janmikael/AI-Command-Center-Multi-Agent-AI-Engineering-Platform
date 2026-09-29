@@ -45,6 +45,14 @@ class TestRenderSystemPrompt:
         context = make_context(agent_adapter="some_future_adapter", agent_role="Designer")
         assert render_system_prompt(context) == "Designer"
 
+    def test_includes_the_m4_3_workflow_instructions(self) -> None:
+        """PLAN-PHASE-2-M4.3.md §1/decision 4: inspect before editing, minimal changes,
+        run tests before completion, summarize changes."""
+        prompt = render_system_prompt(make_context())
+        for phrase in ["Inspect the relevant existing files", "smallest change",
+                       "Run the relevant tests before finishing", "summarize what you changed"]:
+            assert phrase in prompt
+
     def test_includes_every_enabled_rules_statement_and_effect(self) -> None:
         rules = [rule(statement="Never expose secrets.", effect="deny"),
                  rule(statement="Paid tools require approval.", effect="require_approval")]

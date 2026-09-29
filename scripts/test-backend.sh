@@ -10,8 +10,12 @@ set -a
 . ./.env
 set +a
 
+# Built explicitly, not left to `up`'s implicit build-if-missing: `up -d` silently keeps
+# reusing an already-tagged image even after its Dockerfile/entrypoint changes (caught
+# live, PLAN-PHASE-2-M4.3.md — a git-test-server seed-content change had no effect until
+# rebuilt by hand).
+docker compose -f compose.yml -f compose.dev.yml build runner git-test-server >/dev/null
 docker compose -f compose.yml -f compose.dev.yml up -d --wait postgres redis docker-socket-proxy git-test-server >/dev/null
-docker compose -f compose.yml -f compose.dev.yml build runner >/dev/null
 
 export ACC_TEST_DATABASE_URL="postgresql+asyncpg://acc_app:${ACC_APP_DB_PASSWORD}@127.0.0.1:${ACC_PG_PORT:-5432}/acc_test"
 export ACC_TEST_MIGRATIONS_DATABASE_URL="postgresql+asyncpg://acc_owner:${ACC_OWNER_DB_PASSWORD}@127.0.0.1:${ACC_PG_PORT:-5432}/acc_test"
