@@ -19,6 +19,7 @@ type TaskDetailOut = components["schemas"]["TaskDetailOut"];
 type AgentOut = components["schemas"]["AgentOut"];
 type RuleCategory = components["schemas"]["RuleCategory"];
 type GovernanceRuleOut = components["schemas"]["GovernanceRuleOut"];
+type RunOut = components["schemas"]["RunOut"];
 
 // ─── Reads ──────────────────────────────────────────────────────────────
 export function useOverview() {
@@ -129,6 +130,69 @@ export function useGovernanceRules(filters: GovernanceRuleFilters = {}) {
           await api.GET("/api/v1/governance-rules", {
             params: { query: { category: filters.category, enabled: filters.enabled } },
           })
+        )
+      ).items,
+  });
+}
+
+export interface RunFilters {
+  task_id?: string;
+  agent_id?: string;
+  status?: string;
+}
+
+export function useRuns(filters: RunFilters = {}) {
+  return useQuery({
+    queryKey: queryKeys.runs.list(filters),
+    queryFn: async () =>
+      (
+        unwrap(
+          await api.GET("/api/v1/runs", {
+            params: {
+              query: { task_id: filters.task_id, agent_id: filters.agent_id, status: filters.status },
+            },
+          })
+        )
+      ).items,
+  });
+}
+
+export function useRun(id: string, options?: Partial<UseQueryOptions<RunOut>>) {
+  return useQuery({
+    queryKey: queryKeys.runs.detail(id),
+    queryFn: async () => unwrap(await api.GET("/api/v1/runs/{run_id}", { params: { path: { run_id: id } } })),
+    ...options,
+  });
+}
+
+export function useRunToolCalls(id: string) {
+  return useQuery({
+    queryKey: queryKeys.runs.toolCalls(id),
+    queryFn: async () =>
+      (
+        unwrap(
+          await api.GET("/api/v1/runs/{run_id}/tool-calls", { params: { path: { run_id: id } } })
+        )
+      ).items,
+  });
+}
+
+export function useRunUsage(id: string) {
+  return useQuery({
+    queryKey: queryKeys.runs.usage(id),
+    queryFn: async () =>
+      (unwrap(await api.GET("/api/v1/runs/{run_id}/usage", { params: { path: { run_id: id } } })))
+        .items,
+  });
+}
+
+export function useRunFileChanges(id: string) {
+  return useQuery({
+    queryKey: queryKeys.runs.fileChanges(id),
+    queryFn: async () =>
+      (
+        unwrap(
+          await api.GET("/api/v1/runs/{run_id}/file-changes", { params: { path: { run_id: id } } })
         )
       ).items,
   });
@@ -266,4 +330,17 @@ export function useSetRuleEnabled() {
   });
 }
 
-export type { AgentOut, GovernanceRuleOut, RuleCategory, TaskDetailOut, TaskOut };
+export function useCancelRun(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () =>
+      unwrap(await api.POST("/api/v1/runs/{run_id}/cancel", { params: { path: { run_id: id } } })),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: queryKeys.runs.detail(id) });
+      void qc.invalidateQueries({ queryKey: queryKeys.runs.all });
+      void qc.invalidateQueries({ queryKey: queryKeys.overview });
+    },
+  });
+}
+
+export type { AgentOut, GovernanceRuleOut, RuleCategory, RunOut, TaskDetailOut, TaskOut };

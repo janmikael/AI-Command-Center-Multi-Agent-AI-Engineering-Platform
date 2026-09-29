@@ -5,6 +5,7 @@ import {
   Bot,
   KanbanSquare,
   LayoutDashboard,
+  PlayCircle,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -17,6 +18,7 @@ const NAV_ITEMS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Bot },
   { href: "/tasks", label: "Tasks", icon: KanbanSquare },
+  { href: "/runs", label: "Runs", icon: PlayCircle },
   { href: "/activity", label: "Activity", icon: Activity },
   { href: "/governance", label: "Governance", icon: ShieldCheck },
 ];

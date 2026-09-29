@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -16,6 +17,9 @@ async def list_events(
     project: str | None = None,
     task: str | None = None,
     agent: str | None = None,
+    run_id: Annotated[
+        uuid.UUID | None, Query(description="Scope to one agent run, e.g. its agent.message events")
+    ] = None,
     type_: Annotated[list[str] | None, Query(alias="type")] = None,
     severity: Annotated[list[str] | None, Query()] = None,
     before_seq: int | None = None,
@@ -30,6 +34,7 @@ async def list_events(
         project_slug=project,
         task_key=task,
         agent_slug=agent,
+        run_id=run_id,
         types=type_,
         severities=severity,
         before_seq=before_seq,

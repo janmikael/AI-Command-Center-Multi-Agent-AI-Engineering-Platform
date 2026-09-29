@@ -307,6 +307,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Runs */
+        get: operations["list_runs_api_v1_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_v1_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Run */
+        post: operations["cancel_run_api_v1_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/file-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List File Changes */
+        get: operations["list_file_changes_api_v1_runs__run_id__file_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/tool-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tool Calls
+         * @description PLAN-PHASE-2-M4.2.md §2 — tool call visibility in the dashboard, mirroring
+         *     file-changes exactly.
+         */
+        get: operations["list_tool_calls_api_v1_runs__run_id__tool_calls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/{run_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Usage */
+        get: operations["list_usage_api_v1_runs__run_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks": {
         parameters: {
             query?: never;
@@ -414,6 +520,169 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/runs/{run_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete */
+        post: operations["complete_internal_runs__run_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/runs/{run_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Context
+         * @description Fetched once, at run start, by the Claude Agent SDK adapter (runner/agent_sdk.py) —
+         *     not passed via env vars, so a governance-rule edit made after a run's container image
+         *     was built still reaches the very next run (PLAN-PHASE-2-M4.md §1/§3).
+         */
+        get: operations["context_internal_runs__run_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/runs/{run_id}/fail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fail */
+        post: operations["fail_internal_runs__run_id__fail_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/runs/{run_id}/file-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** File Changes */
+        post: operations["file_changes_internal_runs__run_id__file_changes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/runs/{run_id}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Heartbeat */
+        post: operations["heartbeat_internal_runs__run_id__heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/runs/{run_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Message */
+        post: operations["message_internal_runs__run_id__messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/runs/{run_id}/tool-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tool Call */
+        post: operations["tool_call_internal_runs__run_id__tool_calls_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/runs/{run_id}/tool-calls/{tool_use_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tool Call Complete
+         * @description The PostToolUse-hook half of the tool call lifecycle (PLAN-PHASE-2-M4.2.md §1) —
+         *     404s if no matching row exists (a genuinely unknown tool_use_id, or one belonging to
+         *     a denied call that never executed and was never given one).
+         */
+        post: operations["tool_call_complete_internal_runs__run_id__tool_calls__tool_use_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/runs/{run_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Usage */
+        post: operations["usage_internal_runs__run_id__usage_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/readyz": {
         parameters: {
             query?: never;
@@ -450,6 +719,11 @@ export interface components {
         AgentList: {
             /** Items */
             items: components["schemas"]["AgentOut"][];
+        };
+        /** AgentMessageIn */
+        AgentMessageIn: {
+            /** Text */
+            text: string;
         };
         /** AgentOut */
         AgentOut: {
@@ -499,6 +773,11 @@ export interface components {
             detail?: string | null;
             /** Ok */
             ok: boolean;
+        };
+        /** CompleteIn */
+        CompleteIn: {
+            /** Result Summary */
+            result_summary: string;
         };
         /** ContextEntryCreateIn */
         ContextEntryCreateIn: {
@@ -561,6 +840,35 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /**
+         * ContextGovernanceRuleOut
+         * @description A snapshot of one enabled Global AI Rule, shaped for the runner's own can_use_tool
+         *     gate to evaluate (PLAN-PHASE-2-M4.md §4.2) — fetched once at run start, not the
+         *     operator-facing GovernanceRuleOut (acc/api/schemas.py), which has no `match`.
+         */
+        ContextGovernanceRuleOut: {
+            /** Applies To */
+            applies_to: string[];
+            /** Category */
+            category: string;
+            /** Effect */
+            effect: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Match */
+            match: {
+                [key: string]: unknown;
+            };
+            /** Priority */
+            priority: number;
+            /** Statement */
+            statement: string;
+            /** Title */
+            title: string;
+        };
         /** CriterionIn */
         CriterionIn: {
             /**
@@ -601,6 +909,11 @@ export interface components {
             payload: {
                 [key: string]: unknown;
             };
+            /**
+             * Run Id
+             * @description Set for agent-run-scoped events (PLAN-PHASE-2.5.md §2.2) — an existing column (events.run_id, since M1) surfaced through the REST API for the first time; already present on the WebSocket wire event (acc.realtime.publisher.as_wire_dict)
+             */
+            run_id: string | null;
             /** Seq */
             seq: number;
             /** Severity */
@@ -626,6 +939,60 @@ export interface components {
              * @description Pass as before_seq to get the next (older) page; null when exhausted
              */
             next_cursor: number | null;
+        };
+        /** FailIn */
+        FailIn: {
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            } | null;
+            /** Reason */
+            reason: string;
+        };
+        /** FileChangeIn */
+        FileChangeIn: {
+            /** Additions */
+            additions?: number | null;
+            /**
+             * Change Type
+             * @enum {string}
+             */
+            change_type: "added" | "modified" | "deleted" | "renamed";
+            /** Deletions */
+            deletions?: number | null;
+            /** Path */
+            path: string;
+        };
+        /** FileChangeList */
+        FileChangeList: {
+            /** Items */
+            items: components["schemas"]["FileChangeOut"][];
+        };
+        /** FileChangeOut */
+        FileChangeOut: {
+            /** Additions */
+            additions: number | null;
+            /** Change Type */
+            change_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Deletions */
+            deletions: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Path */
+            path: string;
+        };
+        /** FileChangesIn */
+        FileChangesIn: {
+            /** Changes */
+            changes: components["schemas"]["FileChangeIn"][];
         };
         /** GovernanceRuleCreateIn */
         GovernanceRuleCreateIn: {
@@ -695,6 +1062,16 @@ export interface components {
              * @constant
              */
             status: "ok";
+        };
+        /** HeartbeatIn */
+        HeartbeatIn: {
+            /** Current Step */
+            current_step?: string | null;
+        };
+        /** HeartbeatOut */
+        HeartbeatOut: {
+            /** Cancel Requested */
+            cancel_requested: boolean;
         };
         /** LoginIn */
         LoginIn: {
@@ -821,6 +1198,98 @@ export interface components {
          * @enum {string}
          */
         RuleEffect: "allow" | "require_approval" | "deny" | "advisory";
+        /**
+         * RunContextOut
+         * @description The four-layer agent context (ARCHITECTURE.md §10.2), rendered once at run start.
+         *     system_prompt is layers 1+2 (Global AI Rules + the agent's role — stable, cacheable);
+         *     task_prompt is layers 3+4 (project context + this task's own instructions —
+         *     volatile, per-run). See PLAN-PHASE-2-M4.md §3.
+         */
+        RunContextOut: {
+            /** Governance Rules */
+            governance_rules: components["schemas"]["ContextGovernanceRuleOut"][];
+            /** Max Cost Usd */
+            max_cost_usd: string;
+            /** Max Turns */
+            max_turns: number;
+            /** Model */
+            model: string | null;
+            /** System Prompt */
+            system_prompt: string;
+            /** Task Prompt */
+            task_prompt: string;
+        };
+        /** RunList */
+        RunList: {
+            /** Items */
+            items: components["schemas"]["RunOut"][];
+        };
+        /** RunOut */
+        RunOut: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /** Agent Slug */
+            agent_slug: string;
+            /** Branch Name */
+            branch_name: string | null;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Cache Write Tokens */
+            cache_write_tokens: number;
+            /** Cancel Requested At */
+            cancel_requested_at: string | null;
+            /** Container Id */
+            container_id: string | null;
+            /** Cost Usd */
+            cost_usd: string;
+            /** Current Step */
+            current_step: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /**
+             * Error
+             * @description Set once a run fails or times out (PLAN-PHASE-2-M4.2.md §6); an existing column that was never surfaced here before this milestone
+             */
+            error: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Last Heartbeat At */
+            last_heartbeat_at: string | null;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Provider Session Id */
+            provider_session_id: string | null;
+            /**
+             * Queued At
+             * Format: date-time
+             */
+            queued_at: string;
+            /** Result Summary */
+            result_summary: string | null;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /** Task Key */
+            task_key: string;
+            /** Workspace Ref */
+            workspace_ref: string | null;
+        };
         /** StatusChangeOut */
         StatusChangeOut: {
             /** Actor */
@@ -915,6 +1384,11 @@ export interface components {
             /** Assignee Slug */
             assignee_slug: string | null;
             /**
+             * Branch Name
+             * @description Set once an agent run pushes a branch (Phase 2 M3); null otherwise
+             */
+            branch_name: string | null;
+            /**
              * Created At
              * Format: date-time
              */
@@ -957,11 +1431,151 @@ export interface components {
          * @enum {string}
          */
         TaskStatus: "backlog" | "planning" | "working" | "review" | "awaiting_approval" | "blocked" | "completed" | "failed" | "cancelled";
+        /** ToolCallCompleteIn */
+        ToolCallCompleteIn: {
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Exit Code */
+            exit_code?: number | null;
+            /** Result Excerpt */
+            result_excerpt?: string | null;
+        };
+        /** ToolCallIn */
+        ToolCallIn: {
+            /** Allowed */
+            allowed: boolean;
+            /** Arguments */
+            arguments: {
+                [key: string]: unknown;
+            };
+            /** Blocked By Effect */
+            blocked_by_effect?: ("deny" | "require_approval") | null;
+            /** Denial Reason */
+            denial_reason?: string | null;
+            /** Rule Id */
+            rule_id?: string | null;
+            /** Tool */
+            tool: string;
+            /** Tool Use Id */
+            tool_use_id?: string | null;
+        };
+        /** ToolCallList */
+        ToolCallList: {
+            /** Items */
+            items: components["schemas"]["ToolCallOut"][];
+        };
+        /** ToolCallOut */
+        ToolCallOut: {
+            /** Allowed */
+            allowed: boolean;
+            /** Arguments */
+            arguments: {
+                [key: string]: unknown;
+            };
+            /**
+             * Blocked By Effect
+             * @description "deny" or "require_approval" — approval-state preparation only, no approval mechanism exists yet (PLAN-PHASE-2-M4.2.md §3)
+             */
+            blocked_by_effect: string | null;
+            /** Denial Reason */
+            denial_reason: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Ended At */
+            ended_at: string | null;
+            /** Exit Code */
+            exit_code: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Result Excerpt */
+            result_excerpt: string | null;
+            /**
+             * Rule Id
+             * @description Which governance rule caused a denial, if any (PLAN-PHASE-2-M4.2.md §3)
+             */
+            rule_id: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Tool */
+            tool: string;
+        };
         /** TransitionIn */
         TransitionIn: {
             /** Reason */
             reason?: string | null;
             to: components["schemas"]["TaskStatus"];
+        };
+        /** UsageIn */
+        UsageIn: {
+            /**
+             * Cache Read Tokens
+             * @default 0
+             */
+            cache_read_tokens: number;
+            /**
+             * Cache Write Tokens
+             * @default 0
+             */
+            cache_write_tokens: number;
+            /**
+             * Cost Source
+             * @default provider_reported
+             * @enum {string}
+             */
+            cost_source: "provider_reported" | "estimated";
+            /** Cost Usd */
+            cost_usd: number | string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Model */
+            model: string;
+            /** Output Tokens */
+            output_tokens: number;
+            /**
+             * Provider
+             * @default anthropic
+             */
+            provider: string;
+        };
+        /** UsageRecordList */
+        UsageRecordList: {
+            /** Items */
+            items: components["schemas"]["UsageRecordOut"][];
+        };
+        /** UsageRecordOut */
+        UsageRecordOut: {
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Cache Write Tokens */
+            cache_write_tokens: number;
+            /** Cost Source */
+            cost_source: string;
+            /** Cost Usd */
+            cost_usd: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Model */
+            model: string;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Provider */
+            provider: string;
+            /**
+             * Recorded At
+             * Format: date-time
+             */
+            recorded_at: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -1144,6 +1758,8 @@ export interface operations {
                 project?: string | null;
                 task?: string | null;
                 agent?: string | null;
+                /** @description Scope to one agent run, e.g. its agent.message events */
+                run_id?: string | null;
                 type?: string[] | null;
                 severity?: string[] | null;
                 before_seq?: number | null;
@@ -1641,6 +2257,194 @@ export interface operations {
             };
         };
     };
+    list_runs_api_v1_runs_get: {
+        parameters: {
+            query?: {
+                task_id?: string | null;
+                agent_id?: string | null;
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_v1_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_run_api_v1_runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_file_changes_api_v1_runs__run_id__file_changes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileChangeList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tool_calls_api_v1_runs__run_id__tool_calls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolCallList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_usage_api_v1_runs__run_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageRecordList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_tasks_api_v1_tasks_get: {
         parameters: {
             query?: {
@@ -1900,6 +2704,322 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthOut"];
+                };
+            };
+        };
+    };
+    complete_internal_runs__run_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    context_internal_runs__run_id__context_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fail_internal_runs__run_id__fail_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FailIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    file_changes_internal_runs__run_id__file_changes_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileChangesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    heartbeat_internal_runs__run_id__heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeartbeatOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    message_internal_runs__run_id__messages_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentMessageIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tool_call_internal_runs__run_id__tool_calls_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolCallIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tool_call_complete_internal_runs__run_id__tool_calls__tool_use_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                tool_use_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolCallCompleteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    usage_internal_runs__run_id__usage_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UsageIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

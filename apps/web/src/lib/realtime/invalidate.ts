@@ -5,6 +5,7 @@ export interface InvalidationEvent {
   type?: string;
   task_key?: string | null;
   agent_slug?: string | null;
+  run_id?: string | null;
 }
 
 /**
@@ -18,6 +19,13 @@ export interface InvalidationEvent {
  * context events carry neither task_key nor agent_slug, so they're matched on `type`
  * instead — the governance UI has no per-project scoping this phase, so both event
  * families invalidate the same broad `governance.all` prefix.
+ *
+ * run_id (Phase 2.5): unlike task_key/agent_slug, this one *is* precise when present —
+ * events.run_id is only ever set on run/tool-call/usage events (acc.commands.runs's own
+ * _emit_run), and has been on the wire event since M1 (acc.realtime.publisher.as_wire_dict)
+ * — so a run detail page's own query only refetches for events belonging to *that* run,
+ * not every run tied to the same task. The list page (queryKeys.runs.all) still
+ * refetches broadly, same reasoning as tasks.all above.
  */
 export function queryKeysToInvalidate(event: InvalidationEvent): readonly (readonly unknown[])[] {
   // "activity" always matches server-side, so the feed and the aggregate always refresh.
@@ -26,6 +34,7 @@ export function queryKeysToInvalidate(event: InvalidationEvent): readonly (reado
   if (event.agent_slug) keys.push(queryKeys.agents.all);
   if (event.type?.startsWith("governance_rule.") || event.type?.startsWith("project_context_entry."))
     keys.push(queryKeys.governance.all);
+  if (event.run_id) keys.push(queryKeys.runs.all, queryKeys.runs.detail(event.run_id));
   return keys;
 }
 
@@ -37,5 +46,6 @@ export function allQueryKeys(): readonly (readonly unknown[])[] {
     queryKeys.tasks.all,
     queryKeys.agents.all,
     queryKeys.governance.all,
+    queryKeys.runs.all,
   ];
 }

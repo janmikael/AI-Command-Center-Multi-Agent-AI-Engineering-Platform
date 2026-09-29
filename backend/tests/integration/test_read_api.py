@@ -119,6 +119,67 @@ class TestEventsFeed:
         assert await types(type="agent.message") == ["agent.message"]
         assert await types(project="acc", type="project.created") == ["project.created"]
 
+    async def test_run_id_filter_and_field(
+        self, signed_in: httpx.AsyncClient, app: FastAPI
+    ) -> None:
+        """PLAN-PHASE-2.5.md §2.1/§2.2: scoping the feed to one run (e.g. its agent.message
+        narration), and surfacing events.run_id through the REST API for the first time —
+        it was already on the WebSocket wire event (acc.realtime.publisher.as_wire_dict).
+        events.run_id is a real foreign key (migration 0014), so this needs two real runs,
+        not fabricated ids."""
+        from sqlalchemy import select, update
+
+        from acc.commands.tasks import create_task, transition_task
+        from acc.db.models import Agent, AgentRun
+        from acc.domain.task_status import TaskStatus
+
+        sf = app.state.session_factory
+        async with sf() as s, s.begin():
+            await s.execute(update(Agent).where(Agent.slug == "developer").values(adapter="stub"))
+
+        run_ids = []
+        for i in range(2):
+            ref = await create_task(
+                sf, None, actor="user:seed", created_by=None, project_slug="acc",
+                title=f"run-{i}", assignee="developer",
+            )
+            version = ref.version
+            for to in (TaskStatus.PLANNING, TaskStatus.WORKING):
+                updated = await transition_task(
+                    sf, None, actor="user:seed", key=ref.key, expected_version=version, to=to
+                )
+                version = updated.version
+            async with sf() as s:
+                run = await s.scalar(select(AgentRun).where(AgentRun.task_id == ref.id))
+            assert run is not None
+            run_ids.append(run.id)
+
+        run_id, other_run_id = run_ids
+        async with unit_of_work(sf, None) as uow:
+            await uow.emit(
+                EventType.AGENT_MESSAGE, AgentMessage(text="for the run under test"),
+                actor=SIMULATOR, run_id=run_id,
+            )
+            await uow.emit(
+                EventType.AGENT_MESSAGE, AgentMessage(text="for a different run"),
+                actor=SIMULATOR, run_id=other_run_id,
+            )
+
+        response = await signed_in.get("/api/v1/events", params={"run_id": str(run_id)})
+        items = response.json()["items"]
+        # Also contains this run's own real run.queued (emitted by transition_task's
+        # enqueue side effect) — the filter is scoped by run, not by event type.
+        assert all(item["run_id"] == str(run_id) for item in items)
+        messages = [item for item in items if item["type"] == "agent.message"]
+        assert [m["payload"]["text"] for m in messages] == ["for the run under test"]
+
+    async def test_events_unrelated_to_a_run_have_a_null_run_id(
+        self, signed_in: httpx.AsyncClient
+    ) -> None:
+        await create(signed_in, title="no run involved")
+        items = (await signed_in.get("/api/v1/events", params={"limit": 1})).json()["items"]
+        assert items[0]["run_id"] is None
+
 
 class TestOverview:
     async def test_aggregates(self, signed_in: httpx.AsyncClient) -> None:

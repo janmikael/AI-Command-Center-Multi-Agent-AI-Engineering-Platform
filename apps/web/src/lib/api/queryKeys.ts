@@ -24,4 +24,12 @@ export const queryKeys = {
     all: ["governance"] as const,
     rules: (filters: object = {}) => ["governance", "rules", filters] as const,
   },
+  runs: {
+    all: ["runs"] as const,
+    list: (filters: object = {}) => ["runs", "list", filters] as const,
+    detail: (id: string) => ["runs", "detail", id] as const,
+    toolCalls: (id: string) => ["runs", "detail", id, "tool-calls"] as const,
+    usage: (id: string) => ["runs", "detail", id, "usage"] as const,
+    fileChanges: (id: string) => ["runs", "detail", id, "file-changes"] as const,
+  },
 };

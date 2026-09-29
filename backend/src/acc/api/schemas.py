@@ -91,6 +91,11 @@ class EventOut(OutModel):
     task_title: str | None
     agent_slug: str | None
     agent_name: str | None
+    run_id: uuid.UUID | None = Field(
+        description="Set for agent-run-scoped events (PLAN-PHASE-2.5.md §2.2) — an existing "
+        "column (events.run_id, since M1) surfaced through the REST API for the first time; "
+        "already present on the WebSocket wire event (acc.realtime.publisher.as_wire_dict)"
+    )
     payload: dict[str, Any]
 
 

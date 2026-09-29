@@ -30,6 +30,7 @@ class EventView:
     task_title: str | None
     agent_slug: str | None
     agent_name: str | None
+    run_id: uuid.UUID | None
     payload: dict[str, Any]
 
 
@@ -78,6 +79,7 @@ def to_views(rows: Sequence[Any]) -> list[EventView]:
             task_title=task_title,
             agent_slug=agent_slug,
             agent_name=agent_name,
+            run_id=event.run_id,
             payload=event.payload,
         )
         for event, task_key, task_title, agent_slug, agent_name, user_name in rows
@@ -90,6 +92,7 @@ async def list_events(
     project_slug: str | None = None,
     task_key: str | None = None,
     agent_slug: str | None = None,
+    run_id: uuid.UUID | None = None,
     types: Sequence[str] | None = None,
     severities: Sequence[str] | None = None,
     before_seq: int | None = None,
@@ -100,6 +103,9 @@ async def list_events(
 
     With after_seq the order flips to oldest first: that is the catch-up/replay mode
     used after a reconnect.
+
+    run_id (Phase 2.5): scopes to one agent run — e.g. its agent.message narration,
+    which has no other dedicated read path (PLAN-PHASE-2.5.md §2.1).
     """
     stmt = base_query()
     if project_slug is not None:
@@ -111,6 +117,8 @@ async def list_events(
         stmt = stmt.where(Task.key == task_key)
     if agent_slug is not None:
         stmt = stmt.where(Agent.slug == agent_slug)
+    if run_id is not None:
+        stmt = stmt.where(Event.run_id == run_id)
     if types:
         stmt = stmt.where(Event.type.in_(types))
     if severities:

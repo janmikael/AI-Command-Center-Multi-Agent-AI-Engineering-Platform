@@ -15,6 +15,9 @@ function task(overrides: Partial<TaskOut> = {}): TaskOut {
     project_slug: "acc",
     assignee_slug: null,
     assignee_name: null,
+    // Added in Phase 2 M3; this fixture predates it, and the API client (regenerated
+    // for the first time since M3 in Phase 2.5) masked the gap until now.
+    branch_name: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
     allowed_transitions: ["planning", "cancelled"],

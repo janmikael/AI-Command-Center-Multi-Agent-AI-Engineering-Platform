@@ -52,15 +52,32 @@ describe("queryKeysToInvalidate", () => {
       queryKeys.governance.all
     );
   });
+
+  it("invalidates the runs list and that specific run's detail when run_id is present", () => {
+    const keys = queryKeysToInvalidate({ type: "tool_call.denied", run_id: "run-1" });
+    expect(keys).toContainEqual(queryKeys.runs.all);
+    expect(keys).toContainEqual(queryKeys.runs.detail("run-1"));
+  });
+
+  it("does not invalidate a different run's detail query", () => {
+    const keys = queryKeysToInvalidate({ run_id: "run-1" });
+    expect(keys).not.toContainEqual(queryKeys.runs.detail("run-2"));
+  });
+
+  it("never touches runs when the event has no run_id", () => {
+    const keys = queryKeysToInvalidate({ type: "task.created" });
+    expect(keys).not.toContainEqual(queryKeys.runs.all);
+  });
 });
 
 describe("allQueryKeys", () => {
-  it("covers overview, events, tasks, agents and governance for a resync", () => {
+  it("covers overview, events, tasks, agents, governance and runs for a resync", () => {
     const keys = allQueryKeys();
     expect(keys).toContainEqual(queryKeys.overview);
     expect(keys).toContainEqual(queryKeys.events.all);
     expect(keys).toContainEqual(queryKeys.tasks.all);
     expect(keys).toContainEqual(queryKeys.agents.all);
     expect(keys).toContainEqual(queryKeys.governance.all);
+    expect(keys).toContainEqual(queryKeys.runs.all);
   });
 });

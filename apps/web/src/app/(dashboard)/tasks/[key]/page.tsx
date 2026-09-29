@@ -4,6 +4,7 @@ import { KanbanSquare } from "lucide-react";
 import Link from "next/link";
 import { use } from "react";
 
+import { RunList } from "@/components/runs/run-list";
 import { AssignAgentSelect } from "@/components/tasks/assign-agent-select";
 import { EditTaskDialog } from "@/components/tasks/edit-task-dialog";
 import { StatusHistory } from "@/components/tasks/status-history";
@@ -95,6 +96,7 @@ export default function TaskDetailPage({ params }: PageProps<"/tasks/[key]">) {
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="history">Status history</TabsTrigger>
+          <TabsTrigger value="runs">Runs</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
 
@@ -150,6 +152,10 @@ export default function TaskDetailPage({ params }: PageProps<"/tasks/[key]">) {
 
         <TabsContent value="history">
           <StatusHistory history={detail.status_history} />
+        </TabsContent>
+
+        <TabsContent value="runs">
+          <RunList taskKey={task.key} />
         </TabsContent>
 
         <TabsContent value="activity">

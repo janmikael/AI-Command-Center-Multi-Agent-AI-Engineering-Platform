@@ -119,3 +119,46 @@ export const RULE_EFFECT_COLOR: Record<RuleEffect, string> = {
   deny: "bg-destructive/15 text-destructive",
   advisory: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
 };
+
+// ─── Runs (Phase 2.5) ────────────────────────────────────────────────────
+// RunOut.status is typed as a plain string by the API (acc.domain.agent_run.RunStatus is
+// a backend-only StrEnum, not exposed as an OpenAPI enum) — Record<string, ...> with a
+// fallback in RunStatusBadge, not Record<RunStatus, ...>, matching SEVERITY_COLOR's own
+// same-reasoning pattern above.
+export const RUN_STATUS_LABEL: Record<string, string> = {
+  queued: "Queued",
+  starting: "Starting",
+  running: "Running",
+  succeeded: "Succeeded",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  timed_out: "Timed out",
+};
+
+export const RUN_STATUS_COLOR: Record<string, string> = {
+  queued: "bg-muted text-muted-foreground",
+  starting: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
+  running: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  succeeded: "bg-success/15 text-success",
+  failed: "bg-destructive/15 text-destructive",
+  cancelled: "bg-muted text-muted-foreground line-through decoration-1",
+  timed_out: "bg-destructive/15 text-destructive",
+};
+
+/** Only queued/starting/running runs can be cancelled (acc.domain.agent_run.ACTIVE). */
+export const ACTIVE_RUN_STATUSES = new Set(["queued", "starting", "running"]);
+
+export function formatCostUsd(value: string | number): string {
+  const amount = typeof value === "string" ? Number.parseFloat(value) : value;
+  if (!Number.isFinite(amount)) return "—";
+  // Six-decimal DB precision is real (acc.db.models.agent_run: Numeric(12,6)), but not
+  // meaningful to a human at a glance — four decimals still distinguishes sub-cent runs
+  // without the noise of the trailing digits.
+  return `$${amount.toFixed(4)}`;
+}
+
+export function formatDurationMs(ms: number | null): string {
+  if (ms === null) return "—";
+  if (ms < 1000) return `${ms} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
