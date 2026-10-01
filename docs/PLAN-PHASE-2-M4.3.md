@@ -1,16 +1,36 @@
 # Execution Plan: Phase 2 M4.3 (First Complete Real AI Developer Workflow)
 
-Status: **PAUSED — preparation complete, live validation pending.** Approved and
-implemented (role prompt tweak, hermetic-repo seed content, build-script fix; see §1/§2 —
-602/602 tests pass, none needing a real key). The one thing this milestone actually exists
-to prove — a real task → run → tool calls → file changes → commit → usage → result chain,
-using a real Anthropic API key — has **not** happened: no key is configured (centrally
-managed, not provided for this milestone as of 2026-09-29), and per instruction nothing
-here substitutes a shortcut for that real run. **Do not read this document as M4.3 being
-done.** Resume by picking up §6/§7 once a key is available.
+Status: **PAUSED — preparation complete, live validation pending.** Reaffirmed paused
+2026-10-01: the user declined to configure Anthropic API billing at this time (a deliberate
+choice, distinct from the earlier "no key provided / centrally managed" framing). **Do not
+read this document as M4.3 being done.**
+
+**Completed:**
+- M4.3 preparation (role prompt tweak, hermetic-repo seed content, build-script fix; §1/§2
+  — 604/604 backend tests pass, none needing a real key)
+- Test repository setup (hermetic `git-test-server`, isolated `runner-egress` network,
+  disposable named volume `git_test_repo` — not a company repository)
+- Workflow validation (the end-to-end task → run → tool-call → file-change → usage → result
+  path was exercised with the `stub` adapter during Phase 2.5's dashboard verification;
+  confirms the pipeline shape, not a real model)
+- Pre-flight checks, re-run and confirmed 2026-10-01: `developer` agent's adapter is `none`
+  (disabled); `.env` is untracked by git and covered by `.gitignore` (`.env`, `.env.*`); no
+  real secret value appears in any tracked file (only the env-var *name* in
+  `launcher.py` and a `"fake-key"` test fixture); the hermetic repo remains isolated and
+  disposable
+
+**Pending (blocked on a real Anthropic API key, which will not be configured for now):**
+- Real Claude API execution
+- Real tool execution verification (live `PostToolUse` shape, live `ModelUsage` keys, live
+  governance enforcement against a real agent — §3)
+- Real usage/cost capture
+
+Per instruction: no API key has been added, the SDK flow has not been bypassed, and real
+Claude execution has not been replaced with a simulation. Resume by picking up §6/§7 once a
+key is available. **Wait for future instruction before proceeding further on M4.3.**
 Parent documents: [PLAN-PHASE-2-M4.md](PLAN-PHASE-2-M4.md), [PLAN-PHASE-2-M4.2.md](PLAN-PHASE-2-M4.2.md)
-Builds on: commit `c79b67c` (M4.2 — tool execution hardening, agent run reliability)
-Date: 2026-09-28 (paused 2026-09-29)
+Builds on: commit `ac6a67d` (Phase 2.5 — execution dashboard)
+Date: 2026-09-28 (paused 2026-09-29, reaffirmed 2026-10-01)
 
 ## Scope, as given
 
